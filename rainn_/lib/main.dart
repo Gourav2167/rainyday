@@ -1,12 +1,22 @@
 import 'package:flutter/material.dart';
-import 'screens/home_screen.dart';
-import 'screens/prediction_screen.dart';
-import 'screens/location_screen.dart';
-import 'screens/history_screen.dart';
 import 'screens/about_screen.dart';
 
 void main() {
   runApp(MyApp());
+}
+
+class HistoryScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('History Screen'),
+      ),
+      body: Center(
+        child: Text('This is the History Screen'),
+      ),
+    );
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -62,6 +72,48 @@ class _MainScreenState extends State<MainScreen> {
           BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
           BottomNavigationBarItem(icon: Icon(Icons.info), label: 'About'),
         ],
+      ),
+    );
+  }
+}
+
+class PredictionScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Prediction Screen'),
+      ),
+      body: Center(
+        child: Text('This is the Prediction Screen'),
+      ),
+    );
+  }
+}
+
+class HomeScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Home Screen'),
+      ),
+      body: Center(
+        child: Text('This is the Home Screen'),
+      ),
+    );
+  }
+}
+
+class LocationScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Location Screen'),
+      ),
+      body: Center(
+        child: Text('This is the Location Screen'),
       ),
     );
   }
