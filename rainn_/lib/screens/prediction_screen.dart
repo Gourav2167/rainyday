@@ -239,15 +239,16 @@ class _PredictionScreenState extends State<PredictionScreen> {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
             Spacer(),
-            Text(
+         /*   Text(
               'Tap calendar icon to change date',
               style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
+            ),*/
           ],
         ),
       ),
     );
   }
+
 
   Widget _buildMainPredictionCard(double rainProbability, double avgPrecipitation) {
     return Card(
