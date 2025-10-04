@@ -5,6 +5,19 @@ import '../services/location_service.dart';
 import 'dart:math';
 
 class PredictionScreen extends StatefulWidget {
+  final double? latitude;
+  final double? longitude;
+  final DateTime? selectedDate;
+  final TimeOfDay? selectedTime;
+
+  const PredictionScreen({
+    Key? key,
+    this.latitude,
+    this.longitude,
+    this.selectedDate,
+    this.selectedTime,
+  }) : super(key: key);
+
   @override
   _PredictionScreenState createState() => _PredictionScreenState();
 }
@@ -14,12 +27,20 @@ class _PredictionScreenState extends State<PredictionScreen> {
   bool _isLoading = false;
   String? _error;
   DateTime _selectedDate = DateTime.now();
+  TimeOfDay _selectedTime = TimeOfDay.now();
+  double? _selectedLatitude;
+  double? _selectedLongitude;
   List<double> precipitationData = [];
   List<double> temperatureData = [];
 
   @override
   void initState() {
     super.initState();
+    // Initialize with passed values or defaults
+    _selectedLatitude = widget.latitude;
+    _selectedLongitude = widget.longitude;
+    _selectedDate = widget.selectedDate ?? DateTime.now();
+    _selectedTime = widget.selectedTime ?? TimeOfDay.now();
     _loadPredictionData();
   }
 
@@ -30,19 +51,32 @@ class _PredictionScreenState extends State<PredictionScreen> {
     });
 
     try {
-      // Get current location
-      var position = await LocationService.getCurrentLocation();
-      if (position == null) {
-        throw Exception('Unable to get current location');
+      double latitude, longitude;
+
+      // Use selected location if available, otherwise get current location
+      if (_selectedLatitude != null && _selectedLongitude != null) {
+        latitude = _selectedLatitude!;
+        longitude = _selectedLongitude!;
+      } else {
+        var position = await LocationService.getCurrentLocation();
+        if (position == null) {
+          throw Exception('Unable to get current location');
+        }
+        latitude = position.latitude;
+        longitude = position.longitude;
       }
 
-      // Get prediction for selected date
+      print('Loading prediction for location: $latitude, $longitude');
+      print('Selected date: ${_selectedDate.toString().split(' ')[0]}');
+
+      // Get prediction for selected date, time, and location
       var data = await NasaApiService.getHistoricalData(
-        latitude: position.latitude,
-        longitude: position.longitude,
+        latitude: latitude,
+        longitude: longitude,
         year: _selectedDate.year,
         month: _selectedDate.month,
         day: _selectedDate.day,
+        selectedTime: _selectedTime,
       );
 
       setState(() {
@@ -65,13 +99,27 @@ class _PredictionScreenState extends State<PredictionScreen> {
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime(2000),
-      lastDate: DateTime.now(),
+      lastDate: DateTime.now().add(Duration(days: 365)), // Allow up to 1 year in the future
     );
     if (picked != null && picked != _selectedDate) {
       setState(() {
         _selectedDate = picked;
       });
       _loadPredictionData();
+    }
+  }
+
+  Future<void> _selectTime(BuildContext context) async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime,
+    );
+    if (picked != null && picked != _selectedTime) {
+      setState(() {
+        _selectedTime = picked;
+      });
+      // Note: Time doesn't affect the data loading since NASA API is daily-based
+      // But we can use it for more precise predictions in the future
     }
   }
 
@@ -109,12 +157,19 @@ class _PredictionScreenState extends State<PredictionScreen> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
+            icon: Icon(Icons.access_time),
+            onPressed: () => _selectTime(context),
+            tooltip: 'Select time',
+          ),
+          IconButton(
             icon: Icon(Icons.calendar_today),
             onPressed: () => _selectDate(context),
+            tooltip: 'Select date',
           ),
           IconButton(
             icon: Icon(Icons.refresh),
             onPressed: _loadPredictionData,
+            tooltip: 'Refresh data',
           ),
         ],
       ),
@@ -226,23 +281,49 @@ class _PredictionScreenState extends State<PredictionScreen> {
   }
 
   Widget _buildDateSelector() {
+    bool isFutureDate = _selectedDate.isAfter(DateTime.now().subtract(Duration(days: 1)));
+
     return Card(
       elevation: 2,
+      color: isFutureDate ? Colors.orange[50] : Colors.white,
       child: Padding(
         padding: EdgeInsets.all(16.0),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.calendar_today, color: Colors.blue),
-            SizedBox(width: 12),
-            Text(
-              'Selected Date: ${_selectedDate.toString().split(' ')[0]}',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            Row(
+              children: [
+                Icon(
+                  Icons.calendar_today,
+                  color: isFutureDate ? Colors.orange : Colors.blue,
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Selected Date: ${_selectedDate.toString().split(' ')[0]}',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: isFutureDate ? Colors.orange[800] : Colors.black,
+                        ),
+                      ),
+                      if (isFutureDate)
+                        Text(
+                          'Future dates use trend-based predictions',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange[600],
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            Spacer(),
-         /*   Text(
-              'Tap calendar icon to change date',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),*/
           ],
         ),
       ),
@@ -351,6 +432,8 @@ class _PredictionScreenState extends State<PredictionScreen> {
   }
 
   Widget _buildHistoricalChart(List<double> precipitationData, List<double> temperatureData) {
+    bool isFutureDate = _selectedDate.isAfter(DateTime.now().subtract(Duration(days: 1)));
+
     return Card(
       elevation: 4,
       child: Padding(
@@ -358,10 +441,35 @@ class _PredictionScreenState extends State<PredictionScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Historical Trends (Last 10 Years)',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Row(
+              children: [
+                Text(
+                  isFutureDate ? 'Prediction Based on Historical Trends' : 'Historical Trends (Last 10 Years)',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                if (isFutureDate)
+                  Padding(
+                    padding: EdgeInsets.only(left: 8.0),
+                    child: Icon(
+                      Icons.trending_up,
+                      size: 20,
+                      color: Colors.orange,
+                    ),
+                  ),
+              ],
             ),
+            if (isFutureDate)
+              Padding(
+                padding: EdgeInsets.only(top: 8.0),
+                child: Text(
+                  'This prediction is based on historical patterns for this date',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.orange[600],
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
             SizedBox(height: 16),
             Container(
               height: 200,
@@ -437,6 +545,8 @@ class _PredictionScreenState extends State<PredictionScreen> {
   }
 
   Widget _buildPredictionConfidence(double rainProbability) {
+    bool isFutureDate = _selectedDate.isAfter(DateTime.now().subtract(Duration(days: 1)));
+
     return Card(
       elevation: 4,
       child: Padding(
@@ -444,17 +554,43 @@ class _PredictionScreenState extends State<PredictionScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Prediction Confidence',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Row(
+              children: [
+                Text(
+                  'Prediction Confidence',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                if (isFutureDate)
+                  Padding(
+                    padding: EdgeInsets.only(left: 8.0),
+                    child: Icon(
+                      Icons.warning,
+                      size: 18,
+                      color: Colors.orange,
+                    ),
+                  ),
+              ],
             ),
-            SizedBox(height: 16),
-            _buildConfidenceIndicator(
-              'Rain Prediction Accuracy',
-              min(rainProbability / 100, 1.0),
-              _getRainProbabilityColor(rainProbability),
-            ),
-            SizedBox(height: 8),
+            if (isFutureDate)
+              Padding(
+                padding: EdgeInsets.only(top: 8.0, bottom: 16.0),
+                child: Text(
+                  'Future predictions have lower confidence due to uncertainty',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.orange[600],
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+            if (!isFutureDate) ...[
+              _buildConfidenceIndicator(
+                'Rain Prediction Accuracy',
+                min(rainProbability / 100, 1.0),
+                _getRainProbabilityColor(rainProbability),
+              ),
+              SizedBox(height: 8),
+            ],
             _buildConfidenceIndicator(
               'Data Coverage',
               precipitationData.isNotEmpty ? 0.9 : 0.3,
@@ -462,9 +598,9 @@ class _PredictionScreenState extends State<PredictionScreen> {
             ),
             SizedBox(height: 8),
             _buildConfidenceIndicator(
-              'Historical Data Quality',
-              temperatureData.isNotEmpty ? 0.85 : 0.4,
-              temperatureData.isNotEmpty ? Colors.green : Colors.orange,
+              'Historical Pattern Analysis',
+              isFutureDate ? 0.6 : (temperatureData.isNotEmpty ? 0.85 : 0.7),
+              isFutureDate ? Colors.orange : (temperatureData.isNotEmpty ? Colors.green : Colors.yellow),
             ),
           ],
         ),
@@ -629,6 +765,10 @@ class _PredictionScreenState extends State<PredictionScreen> {
             ),
             Text(
               'Selected Date: ${_selectedDate.toString().split(' ')[0]}',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+            Text(
+              'Selected Time: ${_selectedTime.format(context)}',
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
           ],
