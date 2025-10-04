@@ -112,6 +112,15 @@ class _HomeScreenState extends State<HomeScreen> {
         _predictionResult = result;
         _isLoading = false;
       });
+
+      // Save prediction to history
+      await NasaApiService.savePredictionToHistory(
+        latitude: _currentPosition!.latitude,
+        longitude: _currentPosition!.longitude,
+        date: _selectedDate,
+        time: _selectedTime,
+        predictionData: result,
+      );
     } catch (e) {
       if (!mounted) return;
 

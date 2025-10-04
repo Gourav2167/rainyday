@@ -85,6 +85,15 @@ class _PredictionScreenState extends State<PredictionScreen> {
         temperatureData = List<double>.from(_predictionData!['temperatureData'] ?? []);
         _isLoading = false;
       });
+
+      // Save prediction to history
+      await NasaApiService.savePredictionToHistory(
+        latitude: latitude,
+        longitude: longitude,
+        date: _selectedDate,
+        time: _selectedTime,
+        predictionData: data,
+      );
     } catch (e) {
       print('Error in prediction screen: $e');
       setState(() {

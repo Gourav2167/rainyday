@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'location_service.dart';
 
 class NasaApiService {
   static const String baseUrl = 'https://power.larc.nasa.gov/api/temporal/daily/point';
@@ -511,5 +513,175 @@ class NasaApiService {
       latitude: 28.7041,
       longitude: 77.1025,
     );
+  }
+
+  // Prediction History Management
+  static const String _historyKey = 'prediction_history';
+  static const int _maxHistoryItems = 50; // Keep only last 50 predictions
+
+  // Save prediction to history
+  static Future<void> savePredictionToHistory({
+    required double latitude,
+    required double longitude,
+    required DateTime date,
+    required TimeOfDay time,
+    required Map<String, dynamic> predictionData,
+  }) async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+
+      // Create prediction record
+      Map<String, dynamic> predictionRecord = {
+        'id': DateTime.now().millisecondsSinceEpoch.toString(),
+        'timestamp': DateTime.now().toIso8601String(),
+        'location': {
+          'latitude': latitude,
+          'longitude': longitude,
+          'address': LocationService.getLocationString(latitude, longitude),
+        },
+        'date': {
+          'year': date.year,
+          'month': date.month,
+          'day': date.day,
+          'formatted': date.toString().split(' ')[0],
+        },
+        'time': {
+          'hour': time.hour,
+          'minute': time.minute,
+          'formatted': '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
+        },
+        'prediction': predictionData,
+      };
+
+      // Get existing history
+      List<String> history = prefs.getStringList(_historyKey) ?? [];
+
+      // Add new prediction to the beginning
+      List<dynamic> historyList = [];
+      if (history.isNotEmpty) {
+        try {
+          historyList = history.map((item) => json.decode(item)).toList();
+        } catch (e) {
+          print('Error parsing existing history: $e');
+          historyList = [];
+        }
+      }
+
+      // Add new prediction to the beginning
+      historyList.insert(0, predictionRecord);
+
+      // Keep only the last N items
+      if (historyList.length > _maxHistoryItems) {
+        historyList = historyList.sublist(0, _maxHistoryItems);
+      }
+
+      // Save back to SharedPreferences
+      List<String> updatedHistory = historyList.map((item) => json.encode(item)).toList();
+      await prefs.setStringList(_historyKey, updatedHistory);
+
+      print('Prediction saved to history. Total items: ${historyList.length}');
+    } catch (e) {
+      print('Error saving prediction to history: $e');
+    }
+  }
+
+  // Get prediction history
+  static Future<List<Map<String, dynamic>>> getPredictionHistory() async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      List<String> history = prefs.getStringList(_historyKey) ?? [];
+
+      if (history.isEmpty) {
+        return [];
+      }
+
+      // Parse history items
+      List<Map<String, dynamic>> historyList = [];
+      for (String item in history) {
+        try {
+          Map<String, dynamic> predictionRecord = json.decode(item);
+          historyList.add(predictionRecord);
+        } catch (e) {
+          print('Error parsing history item: $e');
+        }
+      }
+
+      // Sort by timestamp (newest first)
+      historyList.sort((a, b) {
+        DateTime aTime = DateTime.parse(a['timestamp']);
+        DateTime bTime = DateTime.parse(b['timestamp']);
+        return bTime.compareTo(aTime); // Newest first
+      });
+
+      print('Loaded ${historyList.length} prediction history items');
+      return historyList;
+    } catch (e) {
+      print('Error loading prediction history: $e');
+      return [];
+    }
+  }
+
+  // Clear prediction history
+  static Future<void> clearPredictionHistory() async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_historyKey);
+      print('Prediction history cleared');
+    } catch (e) {
+      print('Error clearing prediction history: $e');
+    }
+  }
+
+  // Get history statistics
+  static Future<Map<String, dynamic>> getHistoryStatistics() async {
+    List<Map<String, dynamic>> history = await getPredictionHistory();
+
+    if (history.isEmpty) {
+      return {
+        'total_predictions': 0,
+        'unique_locations': 0,
+        'date_range': null,
+        'avg_rain_probability': 0.0,
+      };
+    }
+
+    // Calculate statistics
+    Set<String> uniqueLocations = Set();
+    double totalRainProbability = 0.0;
+    DateTime? earliestDate;
+    DateTime? latestDate;
+
+    for (var record in history) {
+      // Count unique locations
+      String locationKey = '${record['location']['latitude']}_${record['location']['longitude']}';
+      uniqueLocations.add(locationKey);
+
+      // Sum rain probabilities
+      double rainProb = record['prediction']['rainProbability'] ?? 0.0;
+      totalRainProbability += rainProb;
+
+      // Track date range
+      DateTime recordDate = DateTime(
+        record['date']['year'],
+        record['date']['month'],
+        record['date']['day'],
+      );
+
+      if (earliestDate == null || recordDate.isBefore(earliestDate)) {
+        earliestDate = recordDate;
+      }
+      if (latestDate == null || recordDate.isAfter(latestDate)) {
+        latestDate = recordDate;
+      }
+    }
+
+    return {
+      'total_predictions': history.length,
+      'unique_locations': uniqueLocations.length,
+      'date_range': earliestDate != null && latestDate != null
+          ? '${earliestDate.toString().split(' ')[0]} to ${latestDate.toString().split(' ')[0]}'
+          : null,
+      'avg_rain_probability': history.isNotEmpty ? totalRainProbability / history.length : 0.0,
+    };
   }
 }
