@@ -21,15 +21,33 @@ class _HomeScreenState extends State<HomeScreen> {
     _getCurrentLocation();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Auto-load prediction when location is available
+    if (_currentPosition != null && _predictionResult == null && !_isLoading) {
+      _getPrediction();
+    }
+  }
+
   Future<void> _getCurrentLocation() async {
+    if (!mounted) return;
+
     setState(() => _isLoading = true);
-    
+
     Position? position = await LocationService.getCurrentLocation();
-    
+
+    if (!mounted) return;
+
     setState(() {
       _currentPosition = position;
       _isLoading = false;
     });
+
+    // Automatically get prediction once location is available
+    if (_currentPosition != null && _predictionResult == null) {
+      _getPrediction();
+    }
   }
 
   Future<void> _selectDate() async {
@@ -39,8 +57,8 @@ class _HomeScreenState extends State<HomeScreen> {
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(Duration(days: 365)),
     );
-    
-    if (picked != null && picked != _selectedDate) {
+
+    if (picked != null && picked != _selectedDate && mounted) {
       setState(() {
         _selectedDate = picked;
       });
@@ -49,11 +67,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _getPrediction() async {
     if (_currentPosition == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Location not available')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Location not available')),
+        );
+      }
       return;
     }
+
+    if (!mounted) return;
 
     setState(() => _isLoading = true);
 
@@ -66,11 +88,15 @@ class _HomeScreenState extends State<HomeScreen> {
         day: _selectedDate.day,
       );
 
+      if (!mounted) return;
+
       setState(() {
         _predictionResult = result;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
+
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error getting prediction: $e')),
@@ -82,101 +108,224 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Rain Prediction'),
-        backgroundColor: Colors.blue[600],
-        foregroundColor: Colors.white,
-      ),
-      body: Padding(
-        padding: EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        title: Row(
           children: [
-            Card(
-              elevation: 4,
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Current Location',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 8),
-                    if (_currentPosition != null)
-                      Text(LocationService.getLocationString(
-                        _currentPosition!.latitude,
-                        _currentPosition!.longitude,
-                      ))
-                    else
-                      Text('Getting location...'),
-                    SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: _getCurrentLocation,
-                      icon: Icon(Icons.refresh),
-                      label: Text('Refresh Location'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            SizedBox(height: 16),
-            Card(
-              elevation: 4,
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Select Date',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 8),
-                    Text(DateFormat('MMMM dd, yyyy').format(_selectedDate)),
-                    SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: _selectDate,
-                      icon: Icon(Icons.calendar_today),
-                      label: Text('Change Date'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _isLoading ? null : _getPrediction,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[600],
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(vertical: 16),
-              ),
-              child: _isLoading
-                  ? CircularProgressIndicator(color: Colors.white)
-                  : Text('Get Rain Prediction', style: TextStyle(fontSize: 16)),
-            ),
-            if (_predictionResult != null) ...[
-              SizedBox(height: 16),
-              Card(
-                elevation: 4,
-                child: Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Prediction Results',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Icon(Icons.cloud_queue, size: 28),
+            SizedBox(width: 12),
+            Text('Rain Prediction'),
+          ],
+        ),
+        backgroundColor: Colors.blue[700],
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.blue[50]!,
+              Colors.white,
+              Colors.blue[50]!,
+            ],
+          ),
+        ),
+        child: Padding(
+          padding: EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Location and Date cards in same row
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Card(
+                      elevation: 8,
+                      shadowColor: Colors.blue.withOpacity(0.2),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      SizedBox(height: 16),
-                      _buildPredictionCard(),
-                    ],
+                      child: Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.location_on, color: Colors.blue[600], size: 20),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Location',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey[800],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 8),
+                            if (_currentPosition != null)
+                              Container(
+                                padding: EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue[50],
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  LocationService.getLocationString(
+                                    _currentPosition!.latitude,
+                                    _currentPosition!.longitude,
+                                  ),
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.blue[800],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              )
+                            else
+                              Text(
+                                'Getting location...',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: _getCurrentLocation,
+                                icon: Icon(Icons.refresh, size: 16),
+                                label: Text('Refresh', style: TextStyle(fontSize: 12)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue[600],
+                                  foregroundColor: Colors.white,
+                                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 16),
+                  Expanded(
+                    child: Card(
+                      elevation: 8,
+                      shadowColor: Colors.blue.withOpacity(0.2),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.calendar_today, color: Colors.blue[600], size: 20),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Date',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey[800],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 8),
+                            Container(
+                              padding: EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.blue[50],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                DateFormat('MMM dd, yyyy').format(_selectedDate),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.blue[800],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                            SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: _selectDate,
+                                icon: Icon(Icons.calendar_today, size: 16),
+                                label: Text('Change', style: TextStyle(fontSize: 12)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue[600],
+                                  foregroundColor: Colors.white,
+                                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 20),
+              // Loading indicator or prediction widget
+              if (_isLoading && _currentPosition != null) ...[
+                Card(
+                  elevation: 8,
+                  shadowColor: Colors.blue.withOpacity(0.2),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Container(
+                    padding: EdgeInsets.all(24.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 3,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue[600]!),
+                          ),
+                        ),
+                        SizedBox(width: 16),
+                        Text(
+                          'Analyzing weather patterns...',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[700],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+              ] else if (_predictionResult != null) ...[
+                _buildCompactPredictionWidget(),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -251,5 +400,123 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildCompactPredictionWidget() {
+    double rainProbability = _predictionResult!['rainProbability'];
+    String comment = _getRainComment(rainProbability);
+    IconData weatherIcon = _getWeatherIcon(rainProbability);
+
+    Color probabilityColor = rainProbability > 70
+        ? Colors.red
+        : rainProbability > 40
+            ? Colors.orange
+            : Colors.green;
+
+    return Card(
+      elevation: 6,
+      child: Container(
+        padding: EdgeInsets.all(16.0),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              probabilityColor.withOpacity(0.1),
+              probabilityColor.withOpacity(0.05),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(weatherIcon, color: probabilityColor, size: 28),
+                SizedBox(width: 12),
+                Text(
+                  'Today\'s Rain Prediction',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${rainProbability.toStringAsFixed(0)}%',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: probabilityColor,
+                        ),
+                      ),
+                      Text(
+                        'Chance of Rain',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: probabilityColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: probabilityColor.withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    comment,
+                    style: TextStyle(
+                      color: probabilityColor,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getRainComment(double probability) {
+    if (probability > 80) {
+      return "Heavy rain expected! Don't step out without raincoat";
+    } else if (probability > 60) {
+      return "High chance of rain. Carry your raincoat";
+    } else if (probability > 40) {
+      return "Moderate rain chance. Be prepared";
+    } else if (probability > 20) {
+      return "Low rain chance. Should be fine";
+    } else {
+      return "No rain expected. Clear skies ahead!";
+    }
+  }
+
+  IconData _getWeatherIcon(double probability) {
+    if (probability > 70) {
+      return Icons.thunderstorm;
+    } else if (probability > 40) {
+      return Icons.grain;
+    } else if (probability > 20) {
+      return Icons.wb_cloudy;
+    } else {
+      return Icons.wb_sunny;
+    }
   }
 }
