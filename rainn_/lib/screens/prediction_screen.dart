@@ -253,10 +253,13 @@ class _PredictionScreenState extends State<PredictionScreen> {
     double avgPrecipitation = (_predictionData!['avgPrecipitation'] ?? 0).toDouble();
     double avgTemperature = (_predictionData!['avgTemperature'] ?? 0).toDouble();
     double avgHumidity = (_predictionData!['avgHumidity'] ?? 0).toDouble();
+    double avgWindSpeed = (_predictionData!['avgWindSpeed'] ?? 0).toDouble();
 
-    print('Prediction Screen - Rain Probability: $rainProbability%');
-    print('Prediction Screen - Avg Precipitation: $avgPrecipitation mm');
-    print('Prediction Screen - Precipitation Data Length: ${precipitationData.length}');
+    print('Enhanced Prediction Screen - Rain Probability: $rainProbability%');
+    print('Enhanced Prediction Screen - Avg Precipitation: $avgPrecipitation mm');
+    print('Enhanced Prediction Screen - Avg Temperature: $avgTemperature°C');
+    print('Enhanced Prediction Screen - Avg Humidity: $avgHumidity%');
+    print('Enhanced Prediction Screen - Avg Wind Speed: $avgWindSpeed m/s');
 
     return SingleChildScrollView(
       padding: EdgeInsets.all(16.0),
@@ -265,19 +268,241 @@ class _PredictionScreenState extends State<PredictionScreen> {
         children: [
           _buildDateSelector(),
           SizedBox(height: 16),
-          _buildMainPredictionCard(rainProbability, avgPrecipitation),
-          SizedBox(height: 16),
-          // Show weather conditions card even with zero values for debugging
-          _buildWeatherConditionsCard(avgTemperature, avgHumidity),
+          _buildEnhancedPredictionCard(rainProbability, avgPrecipitation, avgTemperature, avgHumidity, avgWindSpeed),
           SizedBox(height: 16),
           _buildHistoricalChart(precipitationData, temperatureData),
           SizedBox(height: 16),
           _buildPredictionConfidence(rainProbability),
           SizedBox(height: 16),
-          _buildDebugInfo(), // Add debug information
+          _buildDebugInfo(),
         ],
       ),
     );
+  }
+
+  Widget _buildEnhancedPredictionCard(double rainProbability, double avgPrecipitation, double avgTemperature, double avgHumidity, double avgWindSpeed) {
+    String comment = _getRainComment(rainProbability);
+    IconData weatherIcon = _getWeatherIcon(rainProbability);
+
+    Color probabilityColor = rainProbability > 70
+        ? Colors.red
+        : rainProbability > 40
+            ? Colors.orange
+            : Colors.green;
+
+    return Card(
+      elevation: 6,
+      child: Container(
+        padding: EdgeInsets.all(16.0),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              probabilityColor.withOpacity(0.1),
+              probabilityColor.withOpacity(0.05),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(weatherIcon, color: probabilityColor, size: 28),
+                SizedBox(width: 12),
+                Text(
+                  'Enhanced Rain Prediction',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${rainProbability.toStringAsFixed(0)}%',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: probabilityColor,
+                        ),
+                      ),
+                      Text(
+                        'Chance of Rain',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: probabilityColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: probabilityColor.withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    comment,
+                    style: TextStyle(
+                      color: probabilityColor,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            // Enhanced weather details
+            Row(
+              children: [
+                Expanded(
+                  child: _buildWeatherDetailCard(
+                    'Temperature',
+                    '${avgTemperature.toStringAsFixed(1)}°C',
+                    Icons.thermostat,
+                    _getTemperatureColor(avgTemperature),
+                  ),
+                ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: _buildWeatherDetailCard(
+                    'Humidity',
+                    '${avgHumidity.toStringAsFixed(1)}%',
+                    Icons.water_drop,
+                    _getHumidityColor(avgHumidity),
+                  ),
+                ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: _buildWeatherDetailCard(
+                    'Wind Speed',
+                    '${avgWindSpeed.toStringAsFixed(1)} m/s',
+                    Icons.air,
+                    _getWindSpeedColor(avgWindSpeed),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 12),
+            // Data quality indicator
+            Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.analytics, size: 16, color: Colors.grey[600]),
+                  SizedBox(width: 4),
+                  Text(
+                    'Enhanced prediction using 20+ years of NASA data',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWeatherDetailCard(String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 16),
+          SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.grey[600],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getTemperatureColor(double temp) {
+    if (temp < 10) return Colors.blue;
+    if (temp < 20) return Colors.green;
+    if (temp < 30) return Colors.orange;
+    return Colors.red;
+  }
+
+  Color _getHumidityColor(double humidity) {
+    if (humidity < 30) return Colors.orange;
+    if (humidity < 60) return Colors.green;
+    return Colors.blue;
+  }
+
+  Color _getWindSpeedColor(double windSpeed) {
+    if (windSpeed < 2) return Colors.green;
+    if (windSpeed < 5) return Colors.yellow.shade700;
+    if (windSpeed < 10) return Colors.orange;
+    return Colors.red;
+  }
+
+  String _getRainComment(double probability) {
+    if (probability > 80) {
+      return "Heavy rain expected! Don't step out without raincoat";
+    } else if (probability > 60) {
+      return "High chance of rain. Carry your raincoat";
+    } else if (probability > 40) {
+      return "Moderate rain chance. Be prepared";
+    } else if (probability > 20) {
+      return "Low rain chance. Should be fine";
+    } else {
+      return "No rain expected. Clear skies ahead!";
+    }
+  }
+
+  IconData _getWeatherIcon(double probability) {
+    if (probability > 70) {
+      return Icons.thunderstorm;
+    } else if (probability > 40) {
+      return Icons.grain;
+    } else if (probability > 20) {
+      return Icons.wb_cloudy;
+    } else {
+      return Icons.wb_sunny;
+    }
   }
 
   Widget _buildDateSelector() {

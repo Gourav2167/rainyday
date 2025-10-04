@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geocoding/geocoding.dart';
 import 'dart:async';
 import '../services/location_service.dart';
+import '../services/nasa_api_service.dart';
 import 'prediction_screen.dart';
 
 class LocationScreen extends StatefulWidget {
@@ -280,6 +281,7 @@ class _LocationScreenState extends State<LocationScreen> {
             latitude: _selectedLocation!.latitude,
             longitude: _selectedLocation!.longitude,
             selectedDate: widget.selectedDate ?? DateTime.now(),
+            selectedTime: widget.selectedTime ?? TimeOfDay.now(),
           ),
         ),
       );
@@ -290,6 +292,202 @@ class _LocationScreenState extends State<LocationScreen> {
           backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  void _runLocationDebugTest() {
+    if (_selectedLocation != null) {
+      _showDebugDialog(_selectedLocation!.latitude, _selectedLocation!.longitude);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Please select a location first to run debug test'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
+  }
+
+  void _showDebugDialog(double latitude, double longitude) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.bug_report, color: Colors.blue),
+              SizedBox(width: 8),
+              Text('Location Debug Test'),
+            ],
+          ),
+          content: Container(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Location: ${latitude.toStringAsFixed(4)}, ${longitude.toStringAsFixed(4)}'),
+                SizedBox(height: 8),
+                Text('This will test the NASA API with 20 years of historical data for this location.'),
+                SizedBox(height: 8),
+                Text('The test includes:', style: TextStyle(fontWeight: FontWeight.bold)),
+                SizedBox(height: 4),
+                Text('• API connectivity check'),
+                Text('• Single year data fetch'),
+                Text('• 20-year historical analysis'),
+                Text('• Performance metrics'),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: Text('Cancel'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            ElevatedButton(
+              child: Text('Run Debug Test'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _executeDebugTest(latitude, longitude);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _executeDebugTest(double latitude, double longitude) async {
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.bug_report, color: Colors.blue),
+              SizedBox(width: 8),
+              Text('Running Debug Test...'),
+            ],
+          ),
+          content: Container(
+            height: 120,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Testing NASA API with 20 years of data...'),
+                SizedBox(height: 8),
+                Text('This may take a few moments...', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    try {
+      Map<String, dynamic> debugResult = await NasaApiService.debugApiWithHistoricalData(
+        latitude: latitude,
+        longitude: longitude,
+      );
+
+      if (mounted) {
+        Navigator.of(context).pop(); // Close loading dialog
+
+        // Show results dialog
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Icon(
+                    debugResult['success'] == true ? Icons.check_circle : Icons.error,
+                    color: debugResult['success'] == true ? Colors.green : Colors.red,
+                  ),
+                  SizedBox(width: 8),
+                  Text('Debug Test Results'),
+                ],
+              ),
+              content: Container(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      debugResult['success'] == true ? '✓ Test completed successfully!' : '✗ Test failed',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: debugResult['success'] == true ? Colors.green : Colors.red,
+                      ),
+                    ),
+                    SizedBox(height: 12),
+                    if (debugResult['success'] == true) ...[
+                      Text('• Years tested: ${debugResult['years_tested']}'),
+                      Text('• Data points collected: ${debugResult['total_data_points']}'),
+                      Text('• Execution time: ${debugResult['execution_time_ms']}ms'),
+                      if (debugResult.containsKey('data') && debugResult['data'].containsKey('rainProbability'))
+                        Text('• Rain probability: ${debugResult['data']['rainProbability'].toStringAsFixed(1)}%'),
+                    ] else ...[
+                      Text('• Error: ${debugResult['error']}'),
+                      if (debugResult.containsKey('step'))
+                        Text('• Failed at step: ${debugResult['step']}'),
+                    ],
+                    SizedBox(height: 16),
+                    Text(
+                      'Check the console/logs for detailed debug information.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  child: Text('OK'),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop(); // Close loading dialog
+
+        // Show error dialog
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.error, color: Colors.red),
+                  SizedBox(width: 8),
+                  Text('Debug Test Failed'),
+                ],
+              ),
+              content: Text('An unexpected error occurred: $e'),
+              actions: [
+                TextButton(
+                  child: Text('OK'),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      }
     }
   }
 
@@ -473,6 +671,11 @@ class _LocationScreenState extends State<LocationScreen> {
             tooltip: 'Search location',
           ),
           IconButton(
+            icon: Icon(Icons.bug_report),
+            onPressed: _runLocationDebugTest,
+            tooltip: 'Debug NASA API for selected location',
+          ),
+          IconButton(
             icon: Icon(Icons.my_location),
             onPressed: _getCurrentLocation,
             tooltip: 'Go to current location',
@@ -542,58 +745,7 @@ class _LocationScreenState extends State<LocationScreen> {
               ),
             ),
           ),
-          Positioned(
-            bottom: 16,
-            left: 16,
-            right: 16,
-            child: Card(
-              elevation: 4,
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Selected Location Details',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 12),
-                    if (_isLoading)
-                      Center(child: CircularProgressIndicator())
-                    else if (_selectedLocation != null) ...[
-                      _buildLocationInfo('Latitude', _selectedLocation!.latitude.toStringAsFixed(6)),
-                      SizedBox(height: 8),
-                      _buildLocationInfo('Longitude', _selectedLocation!.longitude.toStringAsFixed(6)),
-                      SizedBox(height: 8),
-                      _buildLocationInfo('Selected Date', widget.selectedDate?.toString().split(' ')[0] ?? 'Not selected'),
-                      SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: _predictForSelectedLocation,
-                              icon: Icon(Icons.analytics),
-                              label: Text('Get Rain Prediction'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
-                                foregroundColor: Colors.white,
-                                padding: EdgeInsets.symmetric(vertical: 12),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ] else
-                      Text(
-                        'Tap on the map to select a location',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+
         ],
       ),
       floatingActionButton: FloatingActionButton(
