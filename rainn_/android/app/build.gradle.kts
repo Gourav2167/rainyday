@@ -5,18 +5,25 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Request Java 21 from Gradle toolchain so builds use the latest LTS regardless of local JAVA_HOME
+java {
+    toolchain {
+        languageVersion.set(org.gradle.jvm.toolchain.JavaLanguageVersion.of(21))
+    }
+}
+
 android {
     namespace = "com.example.rainn_"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
+        jvmTarget = JavaVersion.VERSION_21.toString()
     }
 
     defaultConfig {
