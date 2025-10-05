@@ -351,6 +351,52 @@ class _PredictionScreenState extends State<PredictionScreen> {
     }
   }
 
+  Future<void> _testUltraRecentData() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      // Get current location for testing
+      double latitude, longitude;
+      if (_selectedLatitude != null && _selectedLongitude != null) {
+        latitude = _selectedLatitude!;
+        longitude = _selectedLongitude!;
+      } else {
+        var position = await LocationService.getCurrentLocation();
+        if (position == null) {
+          throw Exception('Unable to get current location for testing');
+        }
+        latitude = position.latitude;
+        longitude = position.longitude;
+      }
+
+      Map<String, dynamic> testResult = await NasaApiService.testUltraRecentData(
+        latitude: latitude,
+        longitude: longitude,
+      );
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          if (testResult['success'] == true) {
+            _error = 'Ultra-recent data test completed successfully! Check the debug info below for detailed results.';
+          } else {
+            _error = 'Ultra-recent data test failed: ${testResult['error']}';
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = 'Ultra-recent data test failed: $e';
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -416,6 +462,14 @@ class _PredictionScreenState extends State<PredictionScreen> {
             ),
             child: Text('Test API Connection'),
           ),
+          SizedBox(height: 8),
+          ElevatedButton(
+            onPressed: _testUltraRecentData,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.purple,
+            ),
+            child: Text('Test Ultra-Recent Data'),
+          ),
         ],
       ),
     );
@@ -472,6 +526,9 @@ class _PredictionScreenState extends State<PredictionScreen> {
           _buildDateSelector(),
           SizedBox(height: 16),
           _buildEnhancedPredictionCard(rainProbability, avgPrecipitation, avgTemperature, avgHumidity, avgWindSpeed, confidenceLevel, confidenceText),
+          SizedBox(height: 16),
+          if (_predictionData != null && _predictionData!.containsKey('yesterdaysPrecipitation') && _predictionData!['yesterdaysPrecipitation'] != null)
+            _buildYesterdaysDataCard(_predictionData!['yesterdaysPrecipitation']),
           SizedBox(height: 16),
           _buildHistoricalChart(precipitationData, temperatureData),
           SizedBox(height: 16),
@@ -724,6 +781,169 @@ class _PredictionScreenState extends State<PredictionScreen> {
     } else {
       return Icons.wb_sunny;
     }
+  }
+
+  Widget _buildYesterdaysDataCard(double yesterdaysPrecipitation) {
+    Color rainColor = yesterdaysPrecipitation > 3.0
+        ? Colors.red.shade600
+        : yesterdaysPrecipitation > 1.0
+            ? Colors.orange.shade600
+            : Colors.green.shade600;
+
+    IconData rainIcon = yesterdaysPrecipitation > 3.0
+        ? Icons.thunderstorm
+        : yesterdaysPrecipitation > 1.0
+            ? Icons.grain
+            : Icons.wb_sunny;
+
+    return Card(
+      elevation: 4,
+      child: Container(
+        padding: EdgeInsets.all(16.0),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              rainColor.withOpacity(0.1),
+              rainColor.withOpacity(0.05),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: rainColor.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(rainIcon, color: rainColor, size: 20),
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Yesterday\'s Weather Impact',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey[800],
+                        ),
+                      ),
+                      Text(
+                        'Recent data heavily influencing prediction',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: rainColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: rainColor.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          '${yesterdaysPrecipitation.toStringAsFixed(1)} mm',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: rainColor,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Yesterday\'s Rain',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          '20x',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Data Weight',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 12),
+            Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.amber.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.star, size: 16, color: Colors.amber),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Yesterday\'s weather has maximum influence on today\'s prediction accuracy',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.amber[800],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildDateSelector() {
@@ -1337,7 +1557,15 @@ class _PredictionScreenState extends State<PredictionScreen> {
     Map<String, dynamic> currentYearAnalysis = _predictionData!['currentYearAnalysis'] ?? {};
 
     bool currentYearAvailable = dataQuality['current_year_data'] ?? false;
+    bool ultraRecentAvailable = dataQuality['ultra_recent_data_available'] ?? false;
+    bool recentAvailable = dataQuality['recent_data_available'] ?? false;
+    bool todaysAvailable = dataQuality['todays_data_available'] ?? false;
+    bool yesterdaysAvailable = dataQuality['yesterdays_data_available'] ?? false;
+
     int currentYearPoints = dataQuality['current_precipitation_points'] ?? 0;
+    int ultraRecentPoints = dataQuality['ultra_recent_precipitation_points'] ?? 0;
+    int recentPoints = dataQuality['recent_precipitation_points'] ?? 0;
+    int todaysPoints = dataQuality['todays_precipitation_points'] ?? 0;
     int historicalPoints = dataQuality['historical_precipitation_points'] ?? 0;
     int totalPoints = dataQuality['total_precipitation_years'] ?? 0;
     bool recentRainDetected = dataQuality['recent_rain_detected'] ?? false;
@@ -1351,7 +1579,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Enhanced Prediction Information',
+              'Ultra-Enhanced Prediction Information',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey[700]),
             ),
             SizedBox(height: 8),
@@ -1377,10 +1605,136 @@ class _PredictionScreenState extends State<PredictionScreen> {
             ),
             Divider(height: 16),
             Text(
-              'Data Sources:',
+              'Real-Time Data Sources:',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey[700]),
             ),
+            SizedBox(height: 8),
+
+            // Today's data (highest priority)
+            if (todaysAvailable) ...[
+              Row(
+                children: [
+                  Icon(Icons.flash_on, size: 16, color: Colors.purple),
+                  SizedBox(width: 4),
+                  Text(
+                    'Today\'s Real-Time Data: Available',
+                    style: TextStyle(fontSize: 12, color: Colors.purple[700], fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+              Text(
+                'Points: $todaysPoints | Weight: ${dataSources['todays_data_weight_multiplier']}x',
+                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+              ),
+            ] else ...[
+              Row(
+                children: [
+                  Icon(Icons.flash_off, size: 16, color: Colors.grey),
+                  SizedBox(width: 4),
+                  Text(
+                    'Today\'s Real-Time Data: Not Available',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ],
+
             SizedBox(height: 4),
+
+            // Yesterday's data
+            if (yesterdaysAvailable) ...[
+              Row(
+                children: [
+                  Icon(Icons.water_drop, size: 16, color: Colors.blue),
+                  SizedBox(width: 4),
+                  Text(
+                    'Yesterday\'s Data: Available',
+                    style: TextStyle(fontSize: 12, color: Colors.blue[700], fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+              Text(
+                'Weight: ${dataSources['yesterdays_data_weight_multiplier']}x',
+                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+              ),
+            ] else ...[
+              Row(
+                children: [
+                  Icon(Icons.water_drop_outlined, size: 16, color: Colors.grey),
+                  SizedBox(width: 4),
+                  Text(
+                    'Yesterday\'s Data: Not Available',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ],
+
+            SizedBox(height: 4),
+
+            // Ultra-recent data (last 3 days)
+            if (ultraRecentAvailable) ...[
+              Row(
+                children: [
+                  Icon(Icons.trending_up, size: 16, color: Colors.green),
+                  SizedBox(width: 4),
+                  Text(
+                    'Ultra-Recent Data (3 days): Available',
+                    style: TextStyle(fontSize: 12, color: Colors.green[700], fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+              Text(
+                'Points: $ultraRecentPoints | Weight: ${dataSources['ultra_recent_weight_multiplier']}x',
+                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+              ),
+            ] else ...[
+              Row(
+                children: [
+                  Icon(Icons.trending_flat, size: 16, color: Colors.grey),
+                  SizedBox(width: 4),
+                  Text(
+                    'Ultra-Recent Data (3 days): Not Available',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ],
+
+            SizedBox(height: 4),
+
+            // Recent data (last 7 days)
+            if (recentAvailable) ...[
+              Row(
+                children: [
+                  Icon(Icons.calendar_view_week, size: 16, color: Colors.orange),
+                  SizedBox(width: 4),
+                  Text(
+                    'Recent Data (7 days): Available',
+                    style: TextStyle(fontSize: 12, color: Colors.orange[700], fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+              Text(
+                'Points: $recentPoints | Weight: ${dataSources['recent_data_weight_multiplier']}x',
+                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+              ),
+            ] else ...[
+              Row(
+                children: [
+                  Icon(Icons.calendar_view_week_outlined, size: 16, color: Colors.grey),
+                  SizedBox(width: 4),
+                  Text(
+                    'Recent Data (7 days): Not Available',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ],
+
+            SizedBox(height: 4),
+
+            // Current year data
             Row(
               children: [
                 Icon(
@@ -1397,8 +1751,8 @@ class _PredictionScreenState extends State<PredictionScreen> {
             ),
             if (currentYearAvailable) ...[
               Text(
-                'Current Year Points: $currentYearPoints',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                'Points: $currentYearPoints | Weight: ${dataSources['current_year_weight_multiplier']}x',
+                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
               ),
               Row(
                 children: [
@@ -1417,14 +1771,20 @@ class _PredictionScreenState extends State<PredictionScreen> {
               if (recentRainDetected) ...[
                 Text(
                   'Recent Rain Score: ${(currentYearAnalysis['recentRainScore'] ?? 0).toStringAsFixed(1)}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                 ),
                 Text(
                   'Recent Rainy Days: ${currentYearAnalysis['recentRainyDays'] ?? 0}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                 ),
               ],
             ],
+
+            Divider(height: 16),
+            Text(
+              'Historical Data:',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey[700]),
+            ),
             Text(
               'Historical Points: $historicalPoints',
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
@@ -1437,12 +1797,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
               'Historical Years: ${dataSources['historical_years'] ?? 20}',
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
-            if (currentYearAvailable) ...[
-              Text(
-                'Current Year Weight: ${dataSources['current_year_weight_multiplier']}x',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-              ),
-            ],
+
             Divider(height: 16),
             Text(
               'Selected Date: ${_selectedDate.toString().split(' ')[0]}',
@@ -1451,6 +1806,51 @@ class _PredictionScreenState extends State<PredictionScreen> {
             Text(
               'Selected Time: ${_selectedTime.format(context)}',
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+
+            // Show real-time data quality indicator
+            SizedBox(height: 12),
+            Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: (todaysAvailable || yesterdaysAvailable || ultraRecentAvailable)
+                    ? Colors.green[50]
+                    : Colors.orange[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: (todaysAvailable || yesterdaysAvailable || ultraRecentAvailable)
+                      ? Colors.green.withOpacity(0.3)
+                      : Colors.orange.withOpacity(0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    (todaysAvailable || yesterdaysAvailable || ultraRecentAvailable)
+                        ? Icons.thumb_up
+                        : Icons.thumb_down,
+                    size: 16,
+                    color: (todaysAvailable || yesterdaysAvailable || ultraRecentAvailable)
+                        ? Colors.green
+                        : Colors.orange,
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      (todaysAvailable || yesterdaysAvailable || ultraRecentAvailable)
+                          ? 'Real-time data available for enhanced accuracy'
+                          : 'Using historical data - real-time data not available',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: (todaysAvailable || yesterdaysAvailable || ultraRecentAvailable)
+                            ? Colors.green[800]
+                            : Colors.orange[800],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

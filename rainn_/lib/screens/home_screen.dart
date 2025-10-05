@@ -492,7 +492,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ] else if (_predictionResult != null) ...[
-                Expanded(child: _buildCompactPredictionWidget()),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        _buildCompactPredictionWidget(),
+                        if (_predictionResult!.containsKey('yesterdaysPrecipitation') && _predictionResult!['yesterdaysPrecipitation'] != null)
+                          Padding(
+                            padding: EdgeInsets.only(top: 16),
+                            child: _buildYesterdaysDataCard(_predictionResult!['yesterdaysPrecipitation']),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ],
           ),
@@ -922,6 +935,169 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       return Icons.celebration;
     }
+  }
+
+  Widget _buildYesterdaysDataCard(double yesterdaysPrecipitation) {
+    Color rainColor = yesterdaysPrecipitation > 3.0
+        ? Colors.red.shade600
+        : yesterdaysPrecipitation > 1.0
+            ? Colors.orange.shade600
+            : Colors.green.shade600;
+
+    IconData rainIcon = yesterdaysPrecipitation > 3.0
+        ? Icons.thunderstorm
+        : yesterdaysPrecipitation > 1.0
+            ? Icons.grain
+            : Icons.wb_sunny;
+
+    return Card(
+      elevation: 4,
+      child: Container(
+        padding: EdgeInsets.all(16.0),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              rainColor.withOpacity(0.1),
+              rainColor.withOpacity(0.05),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: rainColor.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(rainIcon, color: rainColor, size: 20),
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Yesterday\'s Weather Impact',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey[800],
+                        ),
+                      ),
+                      Text(
+                        'Recent data heavily influencing prediction',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: rainColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: rainColor.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          '${yesterdaysPrecipitation.toStringAsFixed(1)} mm',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: rainColor,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Yesterday\'s Rain',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          '20x',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Data Weight',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 12),
+            Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.amber.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.star, size: 16, color: Colors.amber),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Yesterday\'s weather has maximum influence on today\'s prediction accuracy',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.amber[800],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
