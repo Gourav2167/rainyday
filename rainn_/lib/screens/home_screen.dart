@@ -271,12 +271,9 @@ class _HomeScreenState extends State<HomeScreen> {
             Text('Rain Prediction'),
           ],
         ),
-        backgroundColor: Colors.blue[700],
-        foregroundColor: Colors.white,
-        elevation: 0,
         actions: [
           IconButton(
-            icon: Icon(Icons.bug_report, color: Colors.white),
+            icon: Icon(Icons.bug_report),
             onPressed: _runDebugTest,
             tooltip: 'Debug NASA API (20 years)',
           ),
@@ -1388,7 +1385,7 @@ class _StaticCircularProgressIndicatorState extends State<StaticCircularProgress
             size: Size(widget.size, widget.size),
             painter: CircularProgressPainter(
               percentage: widget.percentage / 100.0, // Convert percentage to decimal for arc calculation
-              color: _HomeScreenState._getProgressColor(widget.percentage), // Static color based on final percentage
+              color: widget.color, // Use the passed color parameter directly
               strokeWidth: widget.strokeWidth,
               isBackground: false,
             ),

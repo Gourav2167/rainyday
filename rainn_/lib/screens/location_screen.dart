@@ -678,9 +678,6 @@ class _LocationScreenState extends State<LocationScreen> {
       backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Text('Select Location'),
-        backgroundColor: Colors.blue[600],
-        foregroundColor: Colors.white,
-        elevation: 0,
         actions: [
           IconButton(
             icon: Icon(Icons.search),
@@ -737,14 +734,32 @@ class _LocationScreenState extends State<LocationScreen> {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Colors.blue[800],
+                        color: Colors.white,
+                        shadows: [
+                          Shadow(
+                            offset: Offset(1, 1),
+                            blurRadius: 2,
+                            color: Colors.black.withOpacity(0.5),
+                          ),
+                        ],
                       ),
                     ),
                     SizedBox(height: 8),
                     if (_selectedLocation != null) ...[
-                      Text(
-                        'Selected: ${_selectedLocation!.latitude.toStringAsFixed(4)}, ${_selectedLocation!.longitude.toStringAsFixed(4)}',
-                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'Selected: ${_selectedLocation!.latitude.toStringAsFixed(4)}, ${_selectedLocation!.longitude.toStringAsFixed(4)}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
                       SizedBox(height: 8),
                       ElevatedButton.icon(

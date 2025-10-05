@@ -311,9 +311,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
       backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Text('Prediction History'),
-        backgroundColor: Colors.blue[600],
-        foregroundColor: Colors.white,
-        elevation: 0,
         actions: [
           IconButton(
             icon: Icon(Icons.refresh),
@@ -422,12 +419,33 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ],
           Text(
             'Recent Predictions',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              shadows: [
+                Shadow(
+                  offset: Offset(1, 1),
+                  blurRadius: 2,
+                  color: Colors.black.withOpacity(0.5),
+                ),
+              ],
+            ),
           ),
           SizedBox(height: 8),
-          Text(
-            '${_predictionHistory.length} predictions saved',
-            style: TextStyle(color: Colors.grey[600]),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '${_predictionHistory.length} predictions saved',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ),
           SizedBox(height: 16),
           ..._predictionHistory.map((prediction) => _buildPredictionCard(prediction)).toList(),

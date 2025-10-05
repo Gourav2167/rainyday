@@ -36,6 +36,20 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
         scaffoldBackgroundColor: Colors.transparent, // Make scaffold transparent for gradient
+        appBarTheme: AppBarTheme(
+          backgroundColor: Color(0xFF001B48).withOpacity(0.9), // Match gradient start color
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+        ),
+        cardTheme: CardThemeData(
+          color: Colors.white.withOpacity(0.9),
+          elevation: 4,
+          shadowColor: Colors.black.withOpacity(0.2),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
         extensions: [
           const GradientTheme(
             gradient: LinearGradient(

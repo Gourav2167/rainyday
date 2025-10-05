@@ -356,9 +356,6 @@ class _PredictionScreenState extends State<PredictionScreen> {
       backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Text('Rain Prediction'),
-        backgroundColor: Colors.blue[600],
-        foregroundColor: Colors.white,
-        elevation: 0,
         actions: [
           IconButton(
             icon: Icon(Icons.access_time),
@@ -750,14 +747,21 @@ class _PredictionScreenState extends State<PredictionScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Selected Date: ${_selectedDate.toString().split(' ')[0]}',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: isFutureDate ? Colors.orange[800] : Colors.black,
-                        ),
-                      ),
+            Text(
+              'Selected Date: ${_selectedDate.toString().split(' ')[0]}',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: isFutureDate ? Colors.orange[800] : Colors.white,
+                shadows: isFutureDate ? null : [
+                  Shadow(
+                    offset: Offset(1, 1),
+                    blurRadius: 2,
+                    color: Colors.black.withOpacity(0.5),
+                  ),
+                ],
+              ),
+            ),
                       if (isFutureDate)
                         Text(
                           'Future dates use trend-based predictions',
