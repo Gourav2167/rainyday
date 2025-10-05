@@ -167,14 +167,17 @@ class NasaApiService {
 
         print('Parameter data for year $i: $parameter');
 
-        // Extract precipitation data (PRECTOTCORR)
+        // Extract precipitation data (PRECTOTCORR) with enhanced validation
         if (parameter.containsKey('PRECTOTCORR')) {
           var precipData = parameter['PRECTOTCORR'];
           if (precipData is Map) {
             precipData.forEach((dateKey, value) {
-              if (value != null && value != -999.0 && value != -999) {
+              if (value != null && value != -999.0 && value != -999 && value >= 0.0 && value <= 100.0) {
                 double precipValue = (value is int) ? value.toDouble() : value as double;
-                precipitationValues.add(precipValue);
+                // Additional validation: reasonable daily precipitation limit
+                if (precipValue <= 50.0) { // Max 50mm per day is reasonable
+                  precipitationValues.add(precipValue);
+                }
               }
             });
           }
@@ -231,7 +234,7 @@ class NasaApiService {
     print('Wind speed values: ${windSpeedValues.length} points');
 
     // Enhanced rain probability calculation using multiple factors
-    double enhancedRainProbability = _calculateEnhancedRainProbability(
+    double enhancedRainProbability = calculateEnhancedRainProbability(
       precipitationValues,
       temperatureValues,
       humidityValues,
@@ -301,7 +304,7 @@ class NasaApiService {
   }
 
   // Enhanced rain probability calculation using multiple weather factors
-  static double _calculateEnhancedRainProbability(
+  static double calculateEnhancedRainProbability(
     List<double> precipitation,
     List<double> temperature,
     List<double> humidity,
@@ -310,55 +313,298 @@ class NasaApiService {
   ) {
     if (precipitation.isEmpty) return 0.0;
 
-    // Base probability from precipitation data
-    int rainyDays = precipitation.where((p) => p > 1.0).length;
-    double baseProbability = (rainyDays / precipitation.length) * 100.0;
+    // Step 1: Analyze precipitation patterns for sunny condition detection
+    Map<String, dynamic> precipAnalysis = _analyzePrecipitationPatterns(precipitation);
 
-    // Weather factor adjustments
+    // Step 2: Calculate base probability with improved sunny day detection
+    double baseProbability = _calculateImprovedBaseProbability(precipitation, precipAnalysis);
+
+    // Step 3: Apply enhanced weather factor adjustments for sunny conditions
+    Map<String, double> weatherFactors = _calculateEnhancedWeatherFactors(
+      temperature, humidity, windSpeed, precipAnalysis
+    );
+
+    // Step 4: Apply time-based adjustments with local climate awareness
+    double timeAdjustment = _calculateImprovedTimeAdjustment(selectedTime, precipAnalysis);
+
+    // Step 5: Combine all factors with adaptive weighting based on sunny conditions
+    double enhancedProbability = _combineProbabilityFactors(
+      baseProbability, weatherFactors, timeAdjustment, precipAnalysis
+    );
+
+    // Step 6: Apply final validation and bounds checking
+    return _finalizeProbability(enhancedProbability, precipAnalysis);
+  }
+
+  // Analyze precipitation patterns to detect consistently dry conditions
+  static Map<String, dynamic> _analyzePrecipitationPatterns(List<double> precipitation) {
+    if (precipitation.isEmpty) {
+      return {
+        'isConsistentlyDry': false,
+        'drynessScore': 0.0,
+        'maxPrecipitation': 0.0,
+        'significantRainDays': 0,
+        'totalDays': 0,
+      };
+    }
+
+    double maxPrecip = precipitation.reduce((a, b) => a > b ? a : b);
+    int significantRainDays = precipitation.where((p) => p > 3.0).length; // Higher threshold for significant rain
+    int moderateRainDays = precipitation.where((p) => p > 1.0).length;
+    int totalDays = precipitation.length;
+
+    // Calculate dryness score (0-100, higher = more consistently dry)
+    double drynessScore = 0.0;
+
+    // Factor 1: Very few significant rain days
+    if (significantRainDays == 0) {
+      drynessScore += 40.0;
+    } else if (significantRainDays < totalDays * 0.05) { // Less than 5% significant rain days
+      drynessScore += 25.0;
+    }
+
+    // Factor 2: Low maximum precipitation
+    if (maxPrecip < 5.0) {
+      drynessScore += 30.0;
+    } else if (maxPrecip < 10.0) {
+      drynessScore += 15.0;
+    }
+
+    // Factor 3: Overall dry pattern (most days have very little rain)
+    double avgPrecip = precipitation.reduce((a, b) => a + b) / totalDays;
+    if (avgPrecip < 0.5) {
+      drynessScore += 20.0;
+    } else if (avgPrecip < 1.0) {
+      drynessScore += 10.0;
+    }
+
+    // Factor 4: Consistency in dry conditions
+    int veryDryDays = precipitation.where((p) => p < 0.1).length;
+    double dryConsistency = veryDryDays / totalDays;
+    drynessScore += dryConsistency * 15.0; // Up to 15 points for consistency
+
+    bool isConsistentlyDry = drynessScore > 60.0; // Threshold for consistently dry conditions
+
+    return {
+      'isConsistentlyDry': isConsistentlyDry,
+      'drynessScore': drynessScore,
+      'maxPrecipitation': maxPrecip,
+      'significantRainDays': significantRainDays,
+      'moderateRainDays': moderateRainDays,
+      'totalDays': totalDays,
+      'avgPrecipitation': avgPrecip,
+      'dryConsistency': dryConsistency,
+    };
+  }
+
+  // Calculate improved base probability with better sunny day handling
+  static double _calculateImprovedBaseProbability(List<double> precipitation, Map<String, dynamic> precipAnalysis) {
+    int totalDays = precipAnalysis['totalDays'];
+    int significantRainDays = precipAnalysis['significantRainDays'];
+
+    // Use higher threshold for significant rain (3mm+ instead of 2mm+)
+    double baseProbability = (significantRainDays / totalDays) * 100.0;
+
+    // Enhanced penalty for consistently dry conditions
+    if (precipAnalysis['isConsistentlyDry']) {
+      // Strong penalty for consistently dry locations
+      baseProbability = max(0.0, baseProbability - 35.0);
+
+      // Additional penalty based on dryness score
+      double drynessScore = precipAnalysis['drynessScore'];
+      if (drynessScore > 80.0) {
+        baseProbability = max(0.0, baseProbability - 25.0); // Extra penalty for extremely dry
+      } else if (drynessScore > 60.0) {
+        baseProbability = max(0.0, baseProbability - 15.0); // Moderate extra penalty
+      }
+    } else if (significantRainDays == 0) {
+      // Moderate penalty if no significant rain but not consistently dry
+      baseProbability = max(0.0, baseProbability - 15.0);
+    }
+
+    return baseProbability;
+  }
+
+  // Calculate enhanced weather factors with stronger sunny condition adjustments
+  static Map<String, double> _calculateEnhancedWeatherFactors(
+    List<double> temperature,
+    List<double> humidity,
+    List<double> windSpeed,
+    Map<String, dynamic> precipAnalysis,
+  ) {
     double temperatureFactor = 0.0;
     double humidityFactor = 0.0;
     double windFactor = 0.0;
 
+    bool isConsistentlyDry = precipAnalysis['isConsistentlyDry'];
+
+    // Enhanced temperature adjustments
     if (temperature.isNotEmpty) {
       double avgTemp = temperature.reduce((a, b) => a + b) / temperature.length;
-      // Lower temperatures tend to increase rain probability in many regions
-      if (avgTemp < 15) {
-        temperatureFactor = 5.0; // Increase probability for cold weather
-      } else if (avgTemp > 30) {
-        temperatureFactor = -3.0; // Decrease probability for very hot weather
+
+      if (isConsistentlyDry) {
+        // Stronger adjustments for consistently dry locations
+        if (avgTemp > 35) {
+          temperatureFactor = -15.0; // Very strong decrease for extreme heat in dry areas
+        } else if (avgTemp > 30) {
+          temperatureFactor = -10.0; // Strong decrease for hot weather in dry areas
+        } else if (avgTemp > 25) {
+          temperatureFactor = -6.0;  // Moderate decrease for warm weather in dry areas
+        } else if (avgTemp < 5) {
+          temperatureFactor = 3.0;   // Slight increase for very cold weather
+        }
+      } else {
+        // Standard adjustments for other locations
+        if (avgTemp > 35) {
+          temperatureFactor = -8.0;
+        } else if (avgTemp > 28) {
+          temperatureFactor = -4.0;
+        } else if (avgTemp < 5) {
+          temperatureFactor = 2.0;
+        }
       }
     }
 
+    // Enhanced humidity adjustments
     if (humidity.isNotEmpty) {
       double avgHumidity = humidity.reduce((a, b) => a + b) / humidity.length;
-      // High humidity increases rain probability
-      if (avgHumidity > 70) {
-        humidityFactor = 8.0;
-      } else if (avgHumidity > 50) {
-        humidityFactor = 3.0;
-      } else if (avgHumidity < 30) {
-        humidityFactor = -5.0; // Low humidity decreases rain probability
+
+      if (isConsistentlyDry) {
+        // Much stronger adjustments for dry locations
+        if (avgHumidity < 25) {
+          humidityFactor = -12.0; // Very strong decrease for very low humidity in dry areas
+        } else if (avgHumidity < 35) {
+          humidityFactor = -8.0;  // Strong decrease for low humidity in dry areas
+        } else if (avgHumidity < 45) {
+          humidityFactor = -4.0;  // Moderate decrease for moderate humidity in dry areas
+        } else if (avgHumidity > 85) {
+          humidityFactor = 4.0;   // Slight increase for very high humidity
+        }
+      } else {
+        // Standard adjustments for other locations
+        if (avgHumidity < 30) {
+          humidityFactor = -6.0;
+        } else if (avgHumidity < 40) {
+          humidityFactor = -3.0;
+        } else if (avgHumidity > 85) {
+          humidityFactor = 3.0;
+        }
       }
     }
 
+    // Enhanced wind adjustments
     if (windSpeed.isNotEmpty) {
       double avgWindSpeed = windSpeed.reduce((a, b) => a + b) / windSpeed.length;
-      // Moderate wind speeds can indicate changing weather patterns
-      if (avgWindSpeed > 5 && avgWindSpeed < 15) {
-        windFactor = 2.0; // Slight increase for moderate winds
-      } else if (avgWindSpeed > 15) {
-        windFactor = -2.0; // Strong winds might indicate different weather systems
+
+      if (isConsistentlyDry) {
+        // Consider wind patterns in dry areas
+        if (avgWindSpeed > 15) {
+          windFactor = -3.0; // Slight decrease for strong winds in dry areas
+        } else if (avgWindSpeed < 3) {
+          windFactor = -2.0; // Light winds can indicate stable high pressure (sunny)
+        }
+      } else {
+        // Standard wind adjustments
+        if (avgWindSpeed > 15) {
+          windFactor = -2.0;
+        }
       }
     }
 
-    // Apply time-based adjustments
-    double timeAdjustment = _calculateTimeAdjustment(selectedTime);
+    return {
+      'temperature': temperatureFactor,
+      'humidity': humidityFactor,
+      'wind': windFactor,
+    };
+  }
 
-    // Combine all factors
-    double enhancedProbability = baseProbability + temperatureFactor + humidityFactor + windFactor + timeAdjustment;
+  // Calculate improved time adjustments with local climate awareness
+  static double _calculateImprovedTimeAdjustment(TimeOfDay? selectedTime, Map<String, dynamic> precipAnalysis) {
+    if (selectedTime == null) return 0.0;
+
+    int hour = selectedTime.hour;
+    bool isConsistentlyDry = precipAnalysis['isConsistentlyDry'];
+
+    // Base time adjustments
+    double baseTimeAdjustment = 0.0;
+
+    if (hour >= 5 && hour < 11) {
+      // Morning: Generally lower rain probability
+      baseTimeAdjustment = -5.0;
+    } else if (hour >= 11 && hour < 17) {
+      // Afternoon: Standard probability, often when thunderstorms occur
+      baseTimeAdjustment = 1.0;
+    } else if (hour >= 17 && hour < 21) {
+      // Evening: Higher probability in many regions
+      baseTimeAdjustment = 3.0;
+    } else {
+      // Night/Late night: Often highest probability for sustained rain
+      baseTimeAdjustment = 5.0;
+    }
+
+    // Adjust for consistently dry conditions
+    if (isConsistentlyDry) {
+      // Reduce time-based increases for dry locations
+      if (baseTimeAdjustment > 0) {
+        baseTimeAdjustment = baseTimeAdjustment * 0.5; // Reduce positive adjustments by half
+      }
+      // Enhance negative adjustments for dry locations
+      if (baseTimeAdjustment < 0) {
+        baseTimeAdjustment = baseTimeAdjustment * 1.2; // Slightly enhance negative adjustments
+      }
+    }
+
+    return baseTimeAdjustment;
+  }
+
+  // Combine all probability factors with adaptive weighting
+  static double _combineProbabilityFactors(
+    double baseProbability,
+    Map<String, double> weatherFactors,
+    double timeAdjustment,
+    Map<String, dynamic> precipAnalysis,
+  ) {
+    bool isConsistentlyDry = precipAnalysis['isConsistentlyDry'];
+    double drynessScore = precipAnalysis['drynessScore'];
+
+    // Adaptive weighting based on dryness
+    double tempWeight = isConsistentlyDry ? 1.2 : 0.9;  // Higher weight for temperature in dry areas
+    double humidityWeight = isConsistentlyDry ? 1.3 : 0.9; // Higher weight for humidity in dry areas
+    double windWeight = 0.7;
+    double timeWeight = isConsistentlyDry ? 0.6 : 0.8; // Lower weight for time in dry areas
+
+    double enhancedProbability = baseProbability +
+      (weatherFactors['temperature']! * tempWeight) +
+      (weatherFactors['humidity']! * humidityWeight) +
+      (weatherFactors['wind']! * windWeight) +
+      (timeAdjustment * timeWeight);
+
+    return enhancedProbability;
+  }
+
+  // Final probability validation and bounds checking
+  static double _finalizeProbability(double probability, Map<String, dynamic> precipAnalysis) {
+    bool isConsistentlyDry = precipAnalysis['isConsistentlyDry'];
+    double drynessScore = precipAnalysis['drynessScore'];
+
+    // Additional reduction for extremely dry conditions
+    if (isConsistentlyDry && drynessScore > 80.0) {
+      probability = max(0.0, probability - 10.0); // Extra 10% reduction for extremely dry
+    } else if (isConsistentlyDry && drynessScore > 60.0) {
+      probability = max(0.0, probability - 5.0);  // Extra 5% reduction for very dry
+    }
 
     // Ensure probability is within 0-100% range
-    return max(0.0, min(100.0, enhancedProbability));
+    double finalProbability = max(0.0, min(100.0, probability));
+
+    // Log the improvements for debugging
+    print('=== ENHANCED PROBABILITY CALCULATION ===');
+    print('Original probability: ${probability.toStringAsFixed(2)}%');
+    print('Dryness score: ${drynessScore.toStringAsFixed(2)}');
+    print('Is consistently dry: $isConsistentlyDry');
+    print('Final probability: ${finalProbability.toStringAsFixed(2)}%');
+
+    return finalProbability;
   }
 
   // Advanced confidence calculation based on data quality and consistency
