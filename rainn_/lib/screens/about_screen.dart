@@ -65,16 +65,17 @@ class AboutScreen extends StatelessWidget {
               'How It Works',
               'The app analyzes historical weather patterns from the past decade for your selected location and date, calculating rain probability based on NASA\'s precipitation data (PRECTOTCORR parameter).',
             ),
-            SizedBox(height: 16),
+
             _buildInfoCard(
-              'Data Coverage',
-              'NASA POWER provides data at 0.5° x 0.625° spatial resolution with global coverage. Historical data spans from 1981 to present, ensuring robust statistical analysis.',
+              'How to Use',
+              '1. Select your location using the location picker or enter coordinates manually.\n\n2. Choose the date you want to check for rain probability.\n\n3. Tap "Predict Weather" to get results.\n\n4. View the rain probability percentage and confidence level.\n\n5. Check detailed weather parameters including temperature, humidity, and precipitation data.\n\n6. Save predictions to history for future reference.',
             ),
             SizedBox(height: 16),
             _buildInfoCard(
-              'Acknowledgments',
-              'Special thanks to NASA\'s Earth Science Division for providing open access to satellite-derived meteorological data through the POWER project.',
+              'Developer Team - Vishnu',
+              'Team Members:\n• Mrityunjay Burman\n• Gourav Singh\n• Jagdish Das\n• Nirmala Khadka\n• Varun\n• Swarit\n\nFull Stack Developer - Gourav Singh:\n• Led backend API integration with NASA POWER service\n• Implemented location services and data processing algorithms\n• Designed and developed the app architecture and database structure\n• Coordinated with NASA APIs for weather data retrieval and analysis\n\nFrontend Developer - Jagdish Das:\n• Designed and implemented the user interface and user experience\n• Developed responsive mobile layouts for weather prediction screens\n• Created intuitive navigation and interactive elements\n• Optimized app performance and user interactions\n\nFrontend, UI & UX Developer - Nirmala Khadka:\n• Specialized in frontend development and user interface design\n• Created responsive and intuitive mobile layouts for weather prediction screens\n• Designed user experience flows and interactive elements\n• Implemented modern UI components with focus on usability and accessibility\n• Developed visual design systems and ensured consistent user experience across all app screens\n• Optimized app interface for better user engagement and interaction\n\nThis app was developed as part of the NASA Space Apps Challenge 2025, combining expertise in mobile app development, API integration, and data visualization to create an intuitive weather prediction tool.',
             ),
+
           ],
         ),
       ),
