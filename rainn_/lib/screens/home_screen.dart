@@ -61,11 +61,12 @@ class _HomeScreenState extends State<HomeScreen> {
       lastDate: DateTime.now().add(Duration(days: 365)),
     );
 
-    if (picked != null && picked != _selectedDate && mounted) {
+    if (picked != null && mounted) {
       setState(() {
         _selectedDate = picked;
       });
-      _getPrediction(); // Refresh prediction with new date
+      // Auto-refresh prediction whenever date changes (or even if same date is selected again)
+      _getPrediction();
     }
   }
 
@@ -75,11 +76,12 @@ class _HomeScreenState extends State<HomeScreen> {
       initialTime: _selectedTime,
     );
 
-    if (picked != null && picked != _selectedTime && mounted) {
+    if (picked != null && mounted) {
       setState(() {
         _selectedTime = picked;
       });
-      _getPrediction(); // Refresh prediction with new time
+      // Auto-refresh prediction whenever time changes (or even if same time is selected again)
+      _getPrediction();
     }
   }
 
@@ -98,8 +100,8 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Use selected time for more accurate predictions
-      Map<String, dynamic> result = await NasaApiService.getHistoricalData(
+      // Use enhanced prediction method that combines historical data with current year live data
+      Map<String, dynamic> result = await NasaApiService.getEnhancedWeatherData(
         latitude: _currentPosition!.latitude,
         longitude: _currentPosition!.longitude,
         year: _selectedDate.year,

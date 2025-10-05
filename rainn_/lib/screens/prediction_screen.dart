@@ -299,10 +299,11 @@ class _PredictionScreenState extends State<PredictionScreen> {
       firstDate: DateTime(2000),
       lastDate: DateTime.now().add(Duration(days: 365)), // Allow up to 1 year in the future
     );
-    if (picked != null && picked != _selectedDate) {
+    if (picked != null) {
       setState(() {
         _selectedDate = picked;
       });
+      // Auto-refresh prediction whenever date changes (or even if same date is selected again)
       _loadPredictionData();
     }
   }
@@ -312,12 +313,12 @@ class _PredictionScreenState extends State<PredictionScreen> {
       context: context,
       initialTime: _selectedTime,
     );
-    if (picked != null && picked != _selectedTime) {
+    if (picked != null) {
       setState(() {
         _selectedTime = picked;
       });
-      // Note: Time doesn't affect the data loading since NASA API is daily-based
-      // But we can use it for more precise predictions in the future
+      // Auto-refresh prediction whenever time changes (or even if same time is selected again)
+      _loadPredictionData();
     }
   }
 
