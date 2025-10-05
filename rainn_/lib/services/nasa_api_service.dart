@@ -132,14 +132,15 @@ class NasaApiService {
     try {
       List<Map<String, dynamic>> results = await Future.wait(futures);
       print('Got ${results.length} results from API calls');
-      return _processHistoricalData(results, selectedTime);
+      DateTime selectedDate = DateTime(year, month, day);
+      return _processHistoricalData(results, selectedDate, selectedTime);
     } catch (e) {
       print('Error in getHistoricalData: $e');
       throw Exception('Failed to fetch historical data: $e');
     }
   }
 
-  static Map<String, dynamic> _processHistoricalData(List<Map<String, dynamic>> data, [TimeOfDay? selectedTime]) {
+  static Map<String, dynamic> _processHistoricalData(List<Map<String, dynamic>> data, DateTime selectedDate, [TimeOfDay? selectedTime]) {
     List<double> precipitationValues = [];
     List<double> temperatureValues = [];
     List<double> humidityValues = [];
@@ -261,6 +262,17 @@ class NasaApiService {
     print('Average humidity: $avgHumidity%');
     print('Average wind speed: $avgWindSpeed m/s');
 
+    // Calculate prediction confidence
+    Map<String, dynamic> confidenceData = _calculatePredictionConfidence(
+      precipitationValues,
+      temperatureValues,
+      humidityValues,
+      windSpeedValues,
+      selectedDate,
+    );
+
+    print('Prediction confidence: ${confidenceData['overall']}% (${confidenceData['level']})');
+
     return {
       'rainProbability': enhancedRainProbability,
       'baseRainProbability': precipitationValues.isNotEmpty
@@ -274,7 +286,11 @@ class NasaApiService {
       'temperatureData': temperatureValues,
       'humidityData': humidityValues,
       'windSpeedData': windSpeedValues,
-      'selectedTime': selectedTime,
+      'selectedTime': selectedTime != null ? {
+        'hour': selectedTime.hour,
+        'minute': selectedTime.minute,
+      } : null,
+      'confidence': confidenceData,
       'dataQuality': {
         'precipitation_years': precipitationValues.length,
         'temperature_years': temperatureValues.length,
@@ -343,6 +359,127 @@ class NasaApiService {
 
     // Ensure probability is within 0-100% range
     return max(0.0, min(100.0, enhancedProbability));
+  }
+
+  // Advanced confidence calculation based on data quality and consistency
+  static Map<String, dynamic> _calculatePredictionConfidence(
+    List<double> precipitation,
+    List<double> temperature,
+    List<double> humidity,
+    List<double> windSpeed,
+    DateTime selectedDate,
+  ) {
+    double overallConfidence = 100.0;
+    List<String> confidenceFactors = [];
+    List<String> lowConfidenceReasons = [];
+
+    // Factor 1: Data availability (most important)
+    int totalDataPoints = precipitation.length + temperature.length + humidity.length + windSpeed.length;
+    int expectedDataPoints = 80; // 20 years * 4 data points per year
+
+    if (totalDataPoints < 20) {
+      overallConfidence -= 40;
+      lowConfidenceReasons.add("Very limited historical data available");
+      confidenceFactors.add("Data Availability: Critical");
+    } else if (totalDataPoints < 40) {
+      overallConfidence -= 20;
+      lowConfidenceReasons.add("Limited historical data available");
+      confidenceFactors.add("Data Availability: Low");
+    } else if (totalDataPoints < 60) {
+      overallConfidence -= 10;
+      confidenceFactors.add("Data Availability: Moderate");
+    } else {
+      confidenceFactors.add("Data Availability: High");
+    }
+
+    // Factor 2: Data consistency
+    if (precipitation.isNotEmpty) {
+      double precipStdDev = _calculateStandardDeviation(precipitation);
+      double precipMean = precipitation.reduce((a, b) => a + b) / precipitation.length;
+      double precipCV = precipStdDev / precipMean; // Coefficient of variation
+
+      if (precipCV > 1.5) {
+        overallConfidence -= 15;
+        lowConfidenceReasons.add("High variability in precipitation patterns");
+        confidenceFactors.add("Pattern Consistency: Low");
+      } else if (precipCV > 1.0) {
+        overallConfidence -= 5;
+        confidenceFactors.add("Pattern Consistency: Moderate");
+      } else {
+        confidenceFactors.add("Pattern Consistency: High");
+      }
+    }
+
+    // Factor 3: Seasonal data quality
+    int month = selectedDate.month;
+    bool isExtremeSeason = month == 12 || month == 1 || month == 6 || month == 7; // Winter/Summer extremes
+
+    if (isExtremeSeason && precipitation.length < 15) {
+      overallConfidence -= 10;
+      lowConfidenceReasons.add("Limited data for extreme season");
+      confidenceFactors.add("Seasonal Data: Limited");
+    } else {
+      confidenceFactors.add("Seasonal Data: Adequate");
+    }
+
+    // Factor 4: Recent data availability (last 5 years more important)
+    int currentYear = DateTime.now().year;
+    int recentDataPoints = 0;
+
+    // This would need actual date tracking to be fully accurate
+    // For now, assume last 25% of data points are recent
+    int recentThreshold = (precipitation.length * 0.25).toInt();
+    if (precipitation.length >= recentThreshold) {
+      confidenceFactors.add("Recent Data: Available");
+    } else {
+      overallConfidence -= 10;
+      lowConfidenceReasons.add("Limited recent data for trend analysis");
+      confidenceFactors.add("Recent Data: Limited");
+    }
+
+    // Factor 5: Parameter completeness
+    int availableParameters = 0;
+    if (precipitation.isNotEmpty) availableParameters++;
+    if (temperature.isNotEmpty) availableParameters++;
+    if (humidity.isNotEmpty) availableParameters++;
+    if (windSpeed.isNotEmpty) availableParameters++;
+
+    if (availableParameters < 2) {
+      overallConfidence -= 20;
+      lowConfidenceReasons.add("Missing key weather parameters");
+      confidenceFactors.add("Parameter Completeness: Poor");
+    } else if (availableParameters < 4) {
+      overallConfidence -= 5;
+      confidenceFactors.add("Parameter Completeness: Good");
+    } else {
+      confidenceFactors.add("Parameter Completeness: Excellent");
+    }
+
+    // Ensure confidence is within 0-100% range
+    overallConfidence = max(0.0, min(100.0, overallConfidence));
+
+    return {
+      'overall': overallConfidence,
+      'level': _getConfidenceLevel(overallConfidence),
+      'factors': confidenceFactors,
+      'low_confidence_reasons': lowConfidenceReasons,
+      'data_quality_score': (totalDataPoints / expectedDataPoints * 100).clamp(0.0, 100.0),
+    };
+  }
+
+  static double _calculateStandardDeviation(List<double> values) {
+    if (values.isEmpty) return 0.0;
+
+    double mean = values.reduce((a, b) => a + b) / values.length;
+    double sumSquaredDiffs = values.map((value) => pow(value - mean, 2).toDouble()).reduce((a, b) => a + b);
+    return sqrt(sumSquaredDiffs / values.length);
+  }
+
+  static String _getConfidenceLevel(double confidence) {
+    if (confidence >= 80) return 'High';
+    if (confidence >= 60) return 'Moderate';
+    if (confidence >= 40) return 'Low';
+    return 'Very Low';
   }
 
   static double _calculateTimeAdjustment(TimeOfDay? selectedTime) {
@@ -515,6 +652,130 @@ class NasaApiService {
     );
   }
 
+  // Test SharedPreferences functionality
+  static Future<void> testSharedPreferences() async {
+    print('=== TESTING SHARED PREFERENCES ===');
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+
+      // Test 1: Save a test item
+      String testKey = 'test_prediction';
+      Map<String, dynamic> testRecord = {
+        'id': 'test_001',
+        'timestamp': DateTime.now().toIso8601String(),
+        'location': {
+          'latitude': 28.7041,
+          'longitude': 77.1025,
+          'address': 'Test Location',
+        },
+        'prediction': {
+          'rainProbability': 75.0,
+          'avgTemperature': 25.0,
+        }
+      };
+
+      print('Test 1: Saving test item...');
+      await prefs.setString(testKey, json.encode(testRecord));
+      print('✓ Test item saved to SharedPreferences');
+
+      // Test 2: Retrieve the test item
+      print('Test 2: Retrieving test item...');
+      String? retrieved = prefs.getString(testKey);
+      if (retrieved != null) {
+        Map<String, dynamic> decoded = json.decode(retrieved);
+        print('✓ Test item retrieved successfully: ${decoded['id']}');
+      } else {
+        print('✗ Failed to retrieve test item');
+      }
+
+      // Test 3: Check history key
+      print('Test 3: Checking history key...');
+      List<String> historyItems = prefs.getStringList(_historyKey) ?? [];
+      print('Current history items in SharedPreferences: ${historyItems.length}');
+
+      // Test 4: Clean up test
+      print('Test 4: Cleaning up test...');
+      await prefs.remove(testKey);
+      print('✓ Test cleanup completed');
+
+      print('=== SHARED PREFERENCES TEST COMPLETED ===');
+    } catch (e) {
+      print('✗ SharedPreferences test failed: $e');
+    }
+  }
+
+  // Simple test to save a prediction directly
+  static Future<bool> saveTestPrediction() async {
+    try {
+      print('=== SAVING TEST PREDICTION ===');
+
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+
+      // Create a simple test prediction
+      Map<String, dynamic> testPrediction = {
+        'id': 'test_${DateTime.now().millisecondsSinceEpoch}',
+        'timestamp': DateTime.now().toIso8601String(),
+        'location': {
+          'latitude': 28.7041,
+          'longitude': 77.1025,
+          'address': 'Test Delhi Location',
+        },
+        'date': {
+          'year': DateTime.now().year,
+          'month': DateTime.now().month,
+          'day': DateTime.now().day,
+          'formatted': DateTime.now().toString().split(' ')[0],
+        },
+        'time': {
+          'hour': TimeOfDay.now().hour,
+          'minute': TimeOfDay.now().minute,
+          'formatted': '${TimeOfDay.now().hour.toString().padLeft(2, '0')}:${TimeOfDay.now().minute.toString().padLeft(2, '0')}',
+        },
+        'prediction': {
+          'rainProbability': 75.0,
+          'avgTemperature': 25.0,
+          'avgHumidity': 60.0,
+          'avgWindSpeed': 5.0,
+        }
+      };
+
+      print('Created test prediction: ${testPrediction['id']}');
+
+      // Get existing history
+      List<String> existingHistory = prefs.getStringList(_historyKey) ?? [];
+      print('Existing history count: ${existingHistory.length}');
+
+      // Add test prediction
+      List<dynamic> historyList = [];
+      if (existingHistory.isNotEmpty) {
+        historyList = existingHistory.map((item) => json.decode(item)).toList();
+      }
+      historyList.insert(0, testPrediction);
+
+      // Save back
+      List<String> updatedHistory = historyList.map((item) => json.encode(item)).toList();
+      await prefs.setStringList(_historyKey, updatedHistory);
+
+      print('Test prediction saved successfully');
+      print('Total items after save: ${updatedHistory.length}');
+
+      // Verify
+      List<String> verifyHistory = prefs.getStringList(_historyKey) ?? [];
+      print('Verification count: ${verifyHistory.length}');
+
+      if (verifyHistory.length > 0) {
+        Map<String, dynamic> firstItem = json.decode(verifyHistory.first);
+        print('First item: ${firstItem['id']} - ${firstItem['location']['address']}');
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      print('Error saving test prediction: $e');
+      return false;
+    }
+  }
+
   // Prediction History Management
   static const String _historyKey = 'prediction_history';
   static const int _maxHistoryItems = 50; // Keep only last 50 predictions
@@ -528,22 +789,38 @@ class NasaApiService {
     required Map<String, dynamic> predictionData,
   }) async {
     try {
+      print('=== STARTING SAVE TO HISTORY ===');
+      print('Location: $latitude, $longitude');
+      print('Date: ${date.toString()}');
+      print('Time: ${time.hour}:${time.minute}');
+      print('Rain Probability: ${predictionData['rainProbability']}%');
+
       SharedPreferences prefs = await SharedPreferences.getInstance();
 
-      // Create prediction record
+      // Get location address for better display (with fallback)
+      String locationAddress;
+      try {
+        locationAddress = await LocationService.getLocationAddress(latitude, longitude);
+        print('Got location address: $locationAddress');
+      } catch (e) {
+        print('Error getting location address: $e');
+        locationAddress = '$latitude, $longitude';
+      }
+
+      // Create prediction record (convert TimeOfDay to serializable format)
       Map<String, dynamic> predictionRecord = {
         'id': DateTime.now().millisecondsSinceEpoch.toString(),
         'timestamp': DateTime.now().toIso8601String(),
         'location': {
           'latitude': latitude,
           'longitude': longitude,
-          'address': LocationService.getLocationString(latitude, longitude),
+          'address': locationAddress,
         },
         'date': {
           'year': date.year,
           'month': date.month,
           'day': date.day,
-          'formatted': date.toString().split(' ')[0],
+          'formatted': '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}',
         },
         'time': {
           'hour': time.hour,
@@ -553,35 +830,86 @@ class NasaApiService {
         'prediction': predictionData,
       };
 
+      print('Created prediction record with ID: ${predictionRecord['id']}');
+
       // Get existing history
       List<String> history = prefs.getStringList(_historyKey) ?? [];
+      print('Existing history items in SharedPreferences: ${history.length}');
 
       // Add new prediction to the beginning
       List<dynamic> historyList = [];
       if (history.isNotEmpty) {
         try {
           historyList = history.map((item) => json.decode(item)).toList();
+          print('Successfully parsed ${historyList.length} existing history items');
         } catch (e) {
           print('Error parsing existing history: $e');
+          print('Resetting history due to parse error');
           historyList = [];
         }
       }
 
       // Add new prediction to the beginning
       historyList.insert(0, predictionRecord);
+      print('Added new prediction. Total items now: ${historyList.length}');
 
       // Keep only the last N items
       if (historyList.length > _maxHistoryItems) {
         historyList = historyList.sublist(0, _maxHistoryItems);
+        print('Trimmed history to $_maxHistoryItems items');
       }
 
       // Save back to SharedPreferences
       List<String> updatedHistory = historyList.map((item) => json.encode(item)).toList();
-      await prefs.setStringList(_historyKey, updatedHistory);
+      print('About to save ${updatedHistory.length} items to SharedPreferences');
+      print('Sample item: ${updatedHistory.first.substring(0, min(100, updatedHistory.first.length))}...');
 
-      print('Prediction saved to history. Total items: ${historyList.length}');
+      await prefs.setStringList(_historyKey, updatedHistory);
+      print('prefs.setStringList() completed');
+
+      // Immediate verification with detailed logging
+      List<String> verifyHistory = prefs.getStringList(_historyKey) ?? [];
+      print('IMMEDIATE VERIFICATION:');
+      print('Key used: $_historyKey');
+      print('Items retrieved: ${verifyHistory.length}');
+      print('Expected items: ${updatedHistory.length}');
+
+      if (verifyHistory.length != updatedHistory.length) {
+        print('CRITICAL MISMATCH: Expected ${updatedHistory.length} items but got ${verifyHistory.length}');
+      }
+
+      if (verifyHistory.isNotEmpty) {
+        try {
+          Map<String, dynamic> firstItem = json.decode(verifyHistory.first);
+          print('First item verification: ${firstItem['id']} - ${firstItem['location']['address']}');
+
+          // Additional verification - check if our new item is actually there
+          bool foundNewItem = verifyHistory.any((item) {
+            try {
+              Map<String, dynamic> decoded = json.decode(item);
+              return decoded['id'] == predictionRecord['id'];
+            } catch (e) {
+              return false;
+            }
+          });
+          print('New item found in storage: $foundNewItem');
+
+          if (!foundNewItem) {
+            print('CRITICAL: Our new item was not found in storage!');
+            print('Looking for ID: ${predictionRecord['id']}');
+          }
+        } catch (e) {
+          print('Error verifying first item: $e');
+        }
+      } else {
+        print('CRITICAL: No items found in SharedPreferences after save!');
+        print('This indicates the save operation failed');
+      }
+
+      print('=== SAVE TO HISTORY COMPLETED ===');
     } catch (e) {
-      print('Error saving prediction to history: $e');
+      print('CRITICAL ERROR saving prediction to history: $e');
+      print('Stack trace: ${StackTrace.current}');
     }
   }
 
@@ -591,18 +919,25 @@ class NasaApiService {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       List<String> history = prefs.getStringList(_historyKey) ?? [];
 
+      print('Loading prediction history from SharedPreferences');
+      print('Raw history items in SharedPreferences: ${history.length}');
+
       if (history.isEmpty) {
+        print('No history items found in SharedPreferences');
         return [];
       }
 
       // Parse history items
       List<Map<String, dynamic>> historyList = [];
-      for (String item in history) {
+      for (int i = 0; i < history.length; i++) {
         try {
+          String item = history[i];
+          print('Parsing history item $i: ${item.substring(0, min(100, item.length))}...');
           Map<String, dynamic> predictionRecord = json.decode(item);
           historyList.add(predictionRecord);
+          print('Successfully parsed item $i: ${predictionRecord['id']} - ${predictionRecord['location']['address']}');
         } catch (e) {
-          print('Error parsing history item: $e');
+          print('Error parsing history item $i: $e');
         }
       }
 
@@ -613,7 +948,12 @@ class NasaApiService {
         return bTime.compareTo(aTime); // Newest first
       });
 
-      print('Loaded ${historyList.length} prediction history items');
+      print('Successfully loaded and parsed ${historyList.length} prediction history items');
+      for (int i = 0; i < min(3, historyList.length); i++) {
+        var item = historyList[i];
+        print('Recent item ${i + 1}: ${item['location']['address']} - ${item['prediction']['rainProbability']}% rain - ${item['timestamp']}');
+      }
+
       return historyList;
     } catch (e) {
       print('Error loading prediction history: $e');

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../services/nasa_api_service.dart';
 import '../services/location_service.dart';
+import '../widgets/loading_screen.dart';
 import 'dart:math';
 
 class PredictionScreen extends StatefulWidget {
@@ -79,27 +80,68 @@ class _PredictionScreenState extends State<PredictionScreen> {
         selectedTime: _selectedTime,
       );
 
-      setState(() {
-        _predictionData = data;
-        precipitationData = List<double>.from(_predictionData!['precipitationData'] ?? []);
-        temperatureData = List<double>.from(_predictionData!['temperatureData'] ?? []);
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _predictionData = data;
+          precipitationData = List<double>.from(_predictionData!['precipitationData'] ?? []);
+          temperatureData = List<double>.from(_predictionData!['temperatureData'] ?? []);
+          _isLoading = false;
+        });
+      }
+
+      // Get location address for better history display
+      String locationAddress;
+      try {
+        locationAddress = await LocationService.getLocationAddress(latitude, longitude);
+        print('Got location address: $locationAddress');
+      } catch (e) {
+        print('Error getting location address: $e');
+        locationAddress = '$latitude, $longitude';
+      }
+
+      print('Saving prediction to history for location: $locationAddress');
 
       // Save prediction to history
-      await NasaApiService.savePredictionToHistory(
-        latitude: latitude,
-        longitude: longitude,
-        date: _selectedDate,
-        time: _selectedTime,
-        predictionData: data,
-      );
+      try {
+        await NasaApiService.savePredictionToHistory(
+          latitude: latitude,
+          longitude: longitude,
+          date: _selectedDate,
+          time: _selectedTime,
+          predictionData: data,
+        );
+        print('Prediction saved to history successfully');
+
+        // Show success message only after save completes
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Prediction saved to history'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } catch (e) {
+        print('Error saving prediction to history: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to save prediction to history'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
     } catch (e) {
       print('Error in prediction screen: $e');
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -141,19 +183,23 @@ class _PredictionScreenState extends State<PredictionScreen> {
     try {
       bool isConnected = await NasaApiService.testApiConnection();
 
-      setState(() {
-        _isLoading = false;
-        if (isConnected) {
-          _error = 'API connection successful! The service is working correctly.';
-        } else {
-          _error = 'API connection failed. Please check your internet connection and try again.';
-        }
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          if (isConnected) {
+            _error = 'API connection successful! The service is working correctly.';
+          } else {
+            _error = 'API connection failed. Please check your internet connection and try again.';
+          }
+        });
+      }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _error = 'API test failed: $e';
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = 'API test failed: $e';
+        });
+      }
     }
   }
 
@@ -191,15 +237,9 @@ class _PredictionScreenState extends State<PredictionScreen> {
   }
 
   Widget _buildLoadingView() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('Loading prediction data...'),
-        ],
-      ),
+    return LoadingScreen(
+      loadingText: "Loading prediction data...",
+      duration: Duration(seconds: 8),
     );
   }
 
@@ -264,7 +304,14 @@ class _PredictionScreenState extends State<PredictionScreen> {
     double avgHumidity = (_predictionData!['avgHumidity'] ?? 0).toDouble();
     double avgWindSpeed = (_predictionData!['avgWindSpeed'] ?? 0).toDouble();
 
+    // Get confidence data
+    Map<String, dynamic> confidenceData = _predictionData!['confidence'] ?? {};
+    double confidenceLevel = (confidenceData['overall'] ?? 100).toDouble();
+    String confidenceText = confidenceData['level'] ?? 'High';
+    List<String> lowConfidenceReasons = List<String>.from(confidenceData['low_confidence_reasons'] ?? []);
+
     print('Enhanced Prediction Screen - Rain Probability: $rainProbability%');
+    print('Enhanced Prediction Screen - Confidence: $confidenceLevel% ($confidenceText)');
     print('Enhanced Prediction Screen - Avg Precipitation: $avgPrecipitation mm');
     print('Enhanced Prediction Screen - Avg Temperature: $avgTemperature°C');
     print('Enhanced Prediction Screen - Avg Humidity: $avgHumidity%');
@@ -277,11 +324,11 @@ class _PredictionScreenState extends State<PredictionScreen> {
         children: [
           _buildDateSelector(),
           SizedBox(height: 16),
-          _buildEnhancedPredictionCard(rainProbability, avgPrecipitation, avgTemperature, avgHumidity, avgWindSpeed),
+          _buildEnhancedPredictionCard(rainProbability, avgPrecipitation, avgTemperature, avgHumidity, avgWindSpeed, confidenceLevel, confidenceText),
           SizedBox(height: 16),
           _buildHistoricalChart(precipitationData, temperatureData),
           SizedBox(height: 16),
-          _buildPredictionConfidence(rainProbability),
+          _buildRealTimeConfidenceIndicator(confidenceLevel, confidenceText, lowConfidenceReasons),
           SizedBox(height: 16),
           _buildDebugInfo(),
         ],
@@ -289,7 +336,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
     );
   }
 
-  Widget _buildEnhancedPredictionCard(double rainProbability, double avgPrecipitation, double avgTemperature, double avgHumidity, double avgWindSpeed) {
+  Widget _buildEnhancedPredictionCard(double rainProbability, double avgPrecipitation, double avgTemperature, double avgHumidity, double avgWindSpeed, double confidenceLevel, String confidenceText) {
     String comment = _getRainComment(rainProbability);
     IconData weatherIcon = _getWeatherIcon(rainProbability);
 
@@ -965,6 +1012,150 @@ class _PredictionScreenState extends State<PredictionScreen> {
     if (probability >= 40) return 'Moderate chance of rain - Be prepared';
     if (probability >= 20) return 'Low chance of rain - Mostly dry';
     return 'Very low chance of rain - Clear skies expected';
+  }
+
+  Widget _buildRealTimeConfidenceIndicator(double confidenceLevel, String confidenceText, List<String> lowConfidenceReasons) {
+    Color confidenceColor = _getConfidenceColor(confidenceLevel);
+    IconData confidenceIcon = _getConfidenceIcon(confidenceLevel);
+    bool showProminently = confidenceLevel < 60; // Show prominently when confidence is low
+
+    if (!showProminently) {
+      // Show compact version for high confidence
+      return Card(
+        elevation: 2,
+        child: Padding(
+          padding: EdgeInsets.all(12.0),
+          child: Row(
+            children: [
+              Icon(confidenceIcon, color: confidenceColor, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Confidence: ${confidenceLevel.toStringAsFixed(0)}% ($confidenceText)',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: confidenceColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Show detailed version for low confidence
+    return Card(
+      elevation: 4,
+      child: Container(
+        padding: EdgeInsets.all(16.0),
+        decoration: BoxDecoration(
+          color: Colors.orange[50],
+          border: Border.all(color: Colors.orange.withOpacity(0.3)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(confidenceIcon, color: confidenceColor, size: 24),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Low Confidence Prediction',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: confidenceColor,
+                        ),
+                      ),
+                      Text(
+                        '${confidenceLevel.toStringAsFixed(0)}% confidence level',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 12),
+            Text(
+              'This prediction has lower accuracy due to:',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey[700],
+              ),
+            ),
+            SizedBox(height: 8),
+            ...lowConfidenceReasons.map((reason) => Padding(
+              padding: EdgeInsets.only(bottom: 4.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.warning, size: 16, color: Colors.orange),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      reason,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )),
+            SizedBox(height: 12),
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange[100],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, size: 18, color: Colors.orange[700]),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Consider this as a general trend rather than a precise forecast. For more accurate predictions, try selecting a date with more historical data.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.orange[800],
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _getConfidenceColor(double confidence) {
+    if (confidence >= 80) return Colors.green;
+    if (confidence >= 60) return Colors.blue;
+    if (confidence >= 40) return Colors.orange;
+    return Colors.red;
+  }
+
+  IconData _getConfidenceIcon(double confidence) {
+    if (confidence >= 80) return Icons.check_circle;
+    if (confidence >= 60) return Icons.info;
+    if (confidence >= 40) return Icons.warning;
+    return Icons.error;
   }
 
   Widget _buildDebugInfo() {

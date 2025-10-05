@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/location_service.dart';
 import '../services/nasa_api_service.dart';
+import '../widgets/loading_screen.dart';
 import 'package:geolocator/geolocator.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -113,14 +114,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _isLoading = false;
       });
 
-      // Save prediction to history
-      await NasaApiService.savePredictionToHistory(
-        latitude: _currentPosition!.latitude,
-        longitude: _currentPosition!.longitude,
-        date: _selectedDate,
-        time: _selectedTime,
-        predictionData: result,
-      );
+
     } catch (e) {
       if (!mounted) return;
 
@@ -490,40 +484,14 @@ class _HomeScreenState extends State<HomeScreen> {
               SizedBox(height: 20),
               // Loading indicator or prediction widget
               if (_isLoading && _currentPosition != null) ...[
-                Card(
-                  elevation: 8,
-                  shadowColor: Colors.blue.withOpacity(0.2),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Container(
-                    padding: EdgeInsets.all(24.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 3,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue[600]!),
-                          ),
-                        ),
-                        SizedBox(width: 16),
-                        Text(
-                          'Analyzing weather patterns...',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey[700],
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
+                Expanded(
+                  child: LoadingScreen(
+                    loadingText: "Analyzing weather patterns...",
+                    duration: Duration(seconds: 8),
                   ),
                 ),
               ] else if (_predictionResult != null) ...[
-                _buildCompactPredictionWidget(),
+                Expanded(child: _buildCompactPredictionWidget()),
               ],
             ],
           ),

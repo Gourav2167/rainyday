@@ -273,6 +273,8 @@ class _LocationScreenState extends State<LocationScreen> {
 
   void _predictForSelectedLocation() {
     if (_selectedLocation != null) {
+      print('LocationScreen: Starting prediction for location: ${_selectedLocation!.latitude}, ${_selectedLocation!.longitude}');
+
       // Navigate to prediction screen with selected location and current date
       Navigator.push(
         context,
@@ -284,7 +286,10 @@ class _LocationScreenState extends State<LocationScreen> {
             selectedTime: widget.selectedTime ?? TimeOfDay.now(),
           ),
         ),
-      );
+      ).then((_) {
+        // This will be called when returning from prediction screen
+        print('LocationScreen: Returned from prediction screen');
+      });
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
