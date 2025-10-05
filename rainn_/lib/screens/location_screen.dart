@@ -39,6 +39,14 @@ class _LocationScreenState extends State<LocationScreen> {
     _getCurrentLocation();
   }
 
+  @override
+  void dispose() {
+    _searchTimer?.cancel();
+    _mapController.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadSavedMapState() async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -46,7 +54,7 @@ class _LocationScreenState extends State<LocationScreen> {
       double? savedLng = prefs.getDouble('map_center_lng');
       double? savedZoom = prefs.getDouble('map_zoom');
 
-      if (savedLat != null && savedLng != null && savedZoom != null) {
+      if (savedLat != null && savedLng != null && savedZoom != null && mounted) {
         setState(() {
           _mapController.move(LatLng(savedLat, savedLng), savedZoom);
         });
@@ -99,12 +107,14 @@ class _LocationScreenState extends State<LocationScreen> {
         onTimeout: () => throw TimeoutException('Search timed out'),
       );
 
-      setState(() {
-        _searchSuggestions = locations.take(5).map((location) {
-          return '${location.latitude.toStringAsFixed(4)}, ${location.longitude.toStringAsFixed(4)} - ${query}';
-        }).toList();
-        _showSuggestions = true;
-      });
+      if (mounted) {
+        setState(() {
+          _searchSuggestions = locations.take(5).map((location) {
+            return '${location.latitude.toStringAsFixed(4)}, ${location.longitude.toStringAsFixed(4)} - ${query}';
+          }).toList();
+          _showSuggestions = true;
+        });
+      }
     } catch (e) {
       print('Error getting suggestions: $e');
 
@@ -665,10 +675,12 @@ class _LocationScreenState extends State<LocationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Text('Select Location'),
         backgroundColor: Colors.blue[600],
         foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
           IconButton(
             icon: Icon(Icons.search),

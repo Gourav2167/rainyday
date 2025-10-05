@@ -5,6 +5,153 @@ import '../services/location_service.dart';
 import '../widgets/loading_screen.dart';
 import 'dart:math';
 
+// Static Circular Progress Indicator Widget (moved from home_screen.dart)
+class StaticCircularProgressIndicator extends StatefulWidget {
+  final double percentage;
+  final Color color;
+  final double size;
+  final double strokeWidth;
+
+  const StaticCircularProgressIndicator({
+    super.key,
+    required this.percentage,
+    required this.color,
+    required this.size,
+    required this.strokeWidth,
+  });
+
+  @override
+  State<StaticCircularProgressIndicator> createState() => _StaticCircularProgressIndicatorState();
+}
+
+class _StaticCircularProgressIndicatorState extends State<StaticCircularProgressIndicator> {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: widget.size,
+      height: widget.size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.white,
+        border: Border.all(
+          color: widget.color.withOpacity(0.2),
+          width: 2,
+        ),
+      ),
+      child: Stack(
+        children: [
+          // Background reference (full faint circle)
+          CustomPaint(
+            size: Size(widget.size, widget.size),
+            painter: CircularProgressPainter(
+              percentage: 1.0,
+              color: widget.color.withOpacity(0.1),
+              strokeWidth: widget.strokeWidth,
+              isBackground: true,
+            ),
+          ),
+          // Progress arc (visible colored arc - static, no animation)
+          CustomPaint(
+            size: Size(widget.size, widget.size),
+            painter: CircularProgressPainter(
+              percentage: widget.percentage / 100.0, // Convert percentage to decimal for arc calculation
+              color: widget.color, // Use the passed color parameter directly
+              strokeWidth: widget.strokeWidth,
+              isBackground: false,
+            ),
+          ),
+          // Center content
+          Center(
+            child: Container(
+              width: widget.size - widget.strokeWidth * 2 - 20,
+              height: widget.size - widget.strokeWidth * 2 - 20,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+              ),
+              child: Center(
+                child: Text(
+                  '${widget.percentage.toStringAsFixed(0)}%',
+                  style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                    color: widget.color,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getProgressColor(double percentage) {
+    if (percentage >= 70) return Colors.red.shade600;
+    if (percentage >= 50) return Colors.orange.shade600;
+    if (percentage >= 30) return Colors.amber.shade600;
+    return Colors.green.shade600;
+  }
+}
+
+// Custom Painter for Circular Progress
+class CircularProgressPainter extends CustomPainter {
+  final double percentage;
+  final Color color;
+  final double strokeWidth;
+  final bool isBackground;
+
+  CircularProgressPainter({
+    required this.percentage,
+    required this.color,
+    required this.strokeWidth,
+    this.isBackground = false,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.width - strokeWidth) / 2;
+
+    if (isBackground) {
+      // Draw white background track (full circle)
+      final backgroundPaint = Paint()
+        ..color = Colors.white.withOpacity(0.9) // White track
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round;
+
+      canvas.drawCircle(center, radius, backgroundPaint);
+    } else if (percentage > 0) {
+      // Draw progress arc with dynamic color
+      final progressPaint = Paint()
+        ..color = color // Use the dynamic color passed in
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round;
+
+      // Calculate the angle for the progress arc (starts from top, goes clockwise)
+      final sweepAngle = 2 * pi * percentage;
+
+      // Draw the progress arc
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        -pi / 2, // Start from top (12 o'clock position)
+        sweepAngle,   // Sweep angle based on percentage
+        false,        // Don't use center point
+        progressPaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(CircularProgressPainter oldDelegate) {
+    return oldDelegate.percentage != percentage ||
+           oldDelegate.color != color ||
+           oldDelegate.strokeWidth != strokeWidth;
+  }
+}
+
 class PredictionScreen extends StatefulWidget {
   final double? latitude;
   final double? longitude;
@@ -206,10 +353,12 @@ class _PredictionScreenState extends State<PredictionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Text('Rain Prediction'),
         backgroundColor: Colors.blue[600],
         foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
           IconButton(
             icon: Icon(Icons.access_time),
@@ -385,37 +534,55 @@ class _PredictionScreenState extends State<PredictionScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '${rainProbability.toStringAsFixed(0)}%',
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: probabilityColor,
+                      // Static circular progress indicator instead of text
+                      Center(
+                        child: Container(
+                          padding: EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [
+                                probabilityColor.withOpacity(0.1),
+                                probabilityColor.withOpacity(0.05),
+                              ],
+                            ),
+                          ),
+                          child: StaticCircularProgressIndicator(
+                            percentage: rainProbability,
+                            color: probabilityColor,
+                            size: 120,
+                            strokeWidth: 8,
+                          ),
                         ),
                       ),
+                      SizedBox(height: 8),
                       Text(
                         'Chance of Rain',
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.grey[600],
                         ),
+                        textAlign: TextAlign.center,
                       ),
                     ],
                   ),
                 ),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: probabilityColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: probabilityColor.withOpacity(0.3)),
-                  ),
-                  child: Text(
-                    comment,
-                    style: TextStyle(
-                      color: probabilityColor,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 12,
+                SizedBox(width: 16),
+                Expanded(
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: probabilityColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: probabilityColor.withOpacity(0.3)),
+                    ),
+                    child: Text(
+                      comment,
+                      style: TextStyle(
+                        color: probabilityColor,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ),

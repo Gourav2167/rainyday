@@ -41,6 +41,7 @@ dependencies:
   latlong2: ^0.9.1
   shared_preferences: ^2.2.3
   geocoding: ^3.0.0
+  flutter_launcher_icons: ^0.14.4
 
 dev_dependencies:
   flutter_test:
@@ -65,8 +66,8 @@ flutter:
   uses-material-design: true
 
   # To add assets to your application, add an assets section, like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
+  assets:
+    - assets/
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see
@@ -94,3 +95,37 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+
+
+
+# Flutter Launcher Icons Configuration
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/logo1.png"
+  min_sdk_android: 21
+  
+  # Adaptive icon for modern Android devices
+  adaptive_icon_background: "#4DAAED"  # Blue background from your logo
+ # adaptive_icon_foreground: "assets/icon/foreground.png"
+  
+  # Web configuration
+  web:
+    generate: true
+    image_path: "assets/logo1.png"
+    background_color: "#4DAAED"
+    theme_color: "#4DAAED"
+  
+  # Windows configuration
+  windows:
+    generate: true
+    image_path: "assets/logo1.png"
+    icon_size: 48
+  
+  # macOS configuration
+  macos:
+    generate: true
+    image_path: "assets/logo1.png"
+
+  
