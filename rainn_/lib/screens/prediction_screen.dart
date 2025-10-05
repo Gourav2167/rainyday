@@ -217,8 +217,8 @@ class _PredictionScreenState extends State<PredictionScreen> {
       print('Loading prediction for location: $latitude, $longitude');
       print('Selected date: ${_selectedDate.toString().split(' ')[0]}');
 
-      // Get prediction for selected date, time, and location
-      var data = await NasaApiService.getHistoricalData(
+      // Get enhanced prediction with current year live data
+      var data = await NasaApiService.getEnhancedWeatherData(
         latitude: latitude,
         longitude: longitude,
         year: _selectedDate.year,
@@ -1330,6 +1330,17 @@ class _PredictionScreenState extends State<PredictionScreen> {
   }
 
   Widget _buildDebugInfo() {
+    // Get enhanced data quality information
+    Map<String, dynamic> dataQuality = _predictionData!['dataQuality'] ?? {};
+    Map<String, dynamic> dataSources = _predictionData!['data_sources'] ?? {};
+    Map<String, dynamic> currentYearAnalysis = _predictionData!['currentYearAnalysis'] ?? {};
+
+    bool currentYearAvailable = dataQuality['current_year_data'] ?? false;
+    int currentYearPoints = dataQuality['current_precipitation_points'] ?? 0;
+    int historicalPoints = dataQuality['historical_precipitation_points'] ?? 0;
+    int totalPoints = dataQuality['total_precipitation_years'] ?? 0;
+    bool recentRainDetected = dataQuality['recent_rain_detected'] ?? false;
+
     return Card(
       elevation: 2,
       color: Colors.grey[100],
@@ -1339,7 +1350,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Debug Information',
+              'Enhanced Prediction Information',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey[700]),
             ),
             SizedBox(height: 8),
@@ -1352,13 +1363,86 @@ class _PredictionScreenState extends State<PredictionScreen> {
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
             Text(
-              'Precipitation Data Points: ${precipitationData.length}',
+              'Avg Temperature: ${(_predictionData!['avgTemperature'] ?? 0).toStringAsFixed(1)}°C',
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
             Text(
-              'Temperature Data Points: ${temperatureData.length}',
+              'Avg Humidity: ${(_predictionData!['avgHumidity'] ?? 0).toStringAsFixed(1)}%',
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
+            Text(
+              'Avg Wind Speed: ${(_predictionData!['avgWindSpeed'] ?? 0).toStringAsFixed(1)} m/s',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+            Divider(height: 16),
+            Text(
+              'Data Sources:',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey[700]),
+            ),
+            SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(
+                  currentYearAvailable ? Icons.check_circle : Icons.cancel,
+                  size: 16,
+                  color: currentYearAvailable ? Colors.green : Colors.red,
+                ),
+                SizedBox(width: 4),
+                Text(
+                  'Current Year Data: ${currentYearAvailable ? 'Available' : 'Not Available'}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+            if (currentYearAvailable) ...[
+              Text(
+                'Current Year Points: $currentYearPoints',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+              Row(
+                children: [
+                  Icon(
+                    recentRainDetected ? Icons.water_drop : Icons.wb_sunny,
+                    size: 16,
+                    color: recentRainDetected ? Colors.blue : Colors.orange,
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    'Recent Rain: ${recentRainDetected ? 'Detected' : 'Not Detected'}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+              if (recentRainDetected) ...[
+                Text(
+                  'Recent Rain Score: ${(currentYearAnalysis['recentRainScore'] ?? 0).toStringAsFixed(1)}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+                Text(
+                  'Recent Rainy Days: ${currentYearAnalysis['recentRainyDays'] ?? 0}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+              ],
+            ],
+            Text(
+              'Historical Points: $historicalPoints',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+            Text(
+              'Total Data Points: $totalPoints',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+            Text(
+              'Historical Years: ${dataSources['historical_years'] ?? 20}',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+            if (currentYearAvailable) ...[
+              Text(
+                'Current Year Weight: ${dataSources['current_year_weight_multiplier']}x',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+            ],
+            Divider(height: 16),
             Text(
               'Selected Date: ${_selectedDate.toString().split(' ')[0]}',
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),

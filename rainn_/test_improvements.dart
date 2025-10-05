@@ -11,12 +11,13 @@ void main() async {
   List<double> highTemp = [35.0, 38.0, 36.0, 37.0, 39.0, 35.0, 36.0, 38.0, 37.0, 35.0, 36.0, 38.0, 37.0, 35.0, 36.0, 38.0, 37.0, 35.0, 36.0, 38.0];
   List<double> lowHumidity = [15.0, 12.0, 18.0, 14.0, 10.0, 16.0, 13.0, 11.0, 17.0, 15.0, 12.0, 18.0, 14.0, 10.0, 16.0, 13.0, 11.0, 17.0, 15.0, 12.0];
 
-  double dryProbability = NasaApiService.calculateEnhancedRainProbability(
+  double dryProbability = NasaApiService.calculateEnhancedRainProbabilityWithCurrentYearAwareness(
     dryPrecipitation,
     highTemp,
     lowHumidity,
     [5.0, 6.0, 4.0, 7.0, 5.0, 6.0, 4.0, 7.0, 5.0, 6.0, 4.0, 7.0, 5.0, 6.0, 4.0, 7.0, 5.0, 6.0, 4.0, 7.0],
     TimeOfDay(hour: 12, minute: 0),
+    {'hasRecentRain': false, 'recentRainScore': 0.0}, // No recent rain for dry test case
   );
 
   print('Consistently dry location probability: ${dryProbability.toStringAsFixed(2)}%');
@@ -29,12 +30,13 @@ void main() async {
   List<double> moderateTemp = [28.0, 30.0, 29.0, 27.0, 31.0, 28.0, 30.0, 29.0, 26.0, 28.0, 30.0, 29.0, 27.0, 31.0, 28.0, 30.0, 29.0, 26.0, 28.0, 30.0];
   List<double> moderateHumidity = [45.0, 42.0, 48.0, 65.0, 40.0, 46.0, 43.0, 49.0, 68.0, 44.0, 41.0, 47.0, 64.0, 39.0, 45.0, 42.0, 48.0, 67.0, 43.0, 46.0];
 
-  double occasionalProbability = NasaApiService.calculateEnhancedRainProbability(
+  double occasionalProbability = NasaApiService.calculateEnhancedRainProbabilityWithCurrentYearAwareness(
     occasionalPrecipitation,
     moderateTemp,
     moderateHumidity,
     [8.0, 9.0, 7.0, 12.0, 8.0, 9.0, 7.0, 11.0, 8.0, 9.0, 7.0, 12.0, 8.0, 9.0, 7.0, 11.0, 8.0, 9.0, 7.0, 12.0],
     TimeOfDay(hour: 15, minute: 0),
+    {'hasRecentRain': true, 'recentRainScore': 35.0}, // Some recent rain for occasional test case
   );
 
   print('Occasional rain location probability: ${occasionalProbability.toStringAsFixed(2)}%');
@@ -47,12 +49,13 @@ void main() async {
   List<double> coolTemp = [22.0, 24.0, 21.0, 25.0, 23.0, 20.0, 24.0, 19.0, 26.0, 22.0, 25.0, 21.0, 24.0, 20.0, 23.0, 25.0, 22.0, 21.0, 24.0, 23.0];
   List<double> highHumidity = [78.0, 82.0, 75.0, 88.0, 80.0, 85.0, 76.0, 90.0, 77.0, 83.0, 79.0, 86.0, 74.0, 89.0, 81.0, 84.0, 78.0, 87.0, 80.0, 82.0];
 
-  double rainyProbability = NasaApiService.calculateEnhancedRainProbability(
+  double rainyProbability = NasaApiService.calculateEnhancedRainProbabilityWithCurrentYearAwareness(
     rainyPrecipitation,
     coolTemp,
     highHumidity,
     [12.0, 15.0, 10.0, 18.0, 13.0, 16.0, 11.0, 19.0, 14.0, 17.0, 12.0, 15.0, 10.0, 18.0, 13.0, 16.0, 11.0, 19.0, 14.0, 17.0],
     TimeOfDay(hour: 20, minute: 0),
+    {'hasRecentRain': true, 'recentRainScore': 75.0}, // High recent rain for frequent rain test case
   );
 
   print('Frequent rain location probability: ${rainyProbability.toStringAsFixed(2)}%');
@@ -61,12 +64,13 @@ void main() async {
 
   // Test case 4: Edge case - No precipitation data
   print('\n--- TEST CASE 4: Edge Case - No Precipitation Data ---');
-  double noDataProbability = NasaApiService.calculateEnhancedRainProbability(
+  double noDataProbability = NasaApiService.calculateEnhancedRainProbabilityWithCurrentYearAwareness(
     [],
     [25.0, 26.0, 24.0, 27.0, 25.0],
     [50.0, 52.0, 48.0, 54.0, 50.0],
     [5.0, 6.0, 4.0, 7.0, 5.0],
     TimeOfDay(hour: 12, minute: 0),
+    {'hasRecentRain': false, 'recentRainScore': 0.0}, // No data case
   );
 
   print('No data probability: ${noDataProbability.toStringAsFixed(2)}%');

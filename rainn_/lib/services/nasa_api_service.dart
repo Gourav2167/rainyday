@@ -119,7 +119,7 @@ class NasaApiService {
 
       int endDate = int.parse('$endYear${endMonth.toString().padLeft(2, '0')}${endDay.toString().padLeft(2, '0')}');
 
-      print('Requesting data for year ${historicalYear}, date range: $startDate to $endDate');
+      print('Requesting historical data for year ${historicalYear}, date range: $startDate to $endDate');
 
       futures.add(getWeatherData(
         latitude: latitude,
@@ -131,13 +131,466 @@ class NasaApiService {
 
     try {
       List<Map<String, dynamic>> results = await Future.wait(futures);
-      print('Got ${results.length} results from API calls');
+      print('Got ${results.length} historical results from API calls');
       DateTime selectedDate = DateTime(year, month, day);
       return _processHistoricalData(results, selectedDate, selectedTime);
     } catch (e) {
       print('Error in getHistoricalData: $e');
       throw Exception('Failed to fetch historical data: $e');
     }
+  }
+
+  // Get current year live data for more accurate predictions
+  static Future<Map<String, dynamic>> getCurrentYearData({
+    required double latitude,
+    required double longitude,
+    required int year,
+    required int month,
+    required int day,
+  }) async {
+    print('Fetching current year live data for year $year');
+
+    // Format date as integer YYYYMMDD for NASA API
+    int startDate = int.parse('$year${month.toString().padLeft(2, '0')}${day.toString().padLeft(2, '0')}');
+
+    // Calculate end date properly (3 days later)
+    int endYear = year;
+    int endMonth = month;
+    int endDay = day + 2; // 3 days range
+
+    // Handle month/year boundaries
+    if (endDay > 28) { // Use 28 to be safe across all months
+      endDay = endDay - 28;
+      endMonth = endMonth + 1;
+      if (endMonth > 12) {
+        endMonth = 1;
+        endYear = endYear + 1;
+      }
+    }
+
+    int endDate = int.parse('$endYear${endMonth.toString().padLeft(2, '0')}${endDay.toString().padLeft(2, '0')}');
+
+    print('Current year date range: $startDate to $endDate');
+
+    try {
+      Map<String, dynamic> currentData = await getWeatherData(
+        latitude: latitude,
+        longitude: longitude,
+        startDate: startDate,
+        endDate: endDate,
+      );
+
+      print('Successfully fetched current year data');
+      return currentData;
+    } catch (e) {
+      print('Error fetching current year data: $e');
+      print('Continuing with historical data only');
+      return {}; // Return empty map if current data fetch fails
+    }
+  }
+
+  // Enhanced method that combines historical data with current year live data
+  static Future<Map<String, dynamic>> getEnhancedWeatherData({
+    required double latitude,
+    required double longitude,
+    required int year,
+    required int month,
+    required int day,
+    TimeOfDay? selectedTime,
+  }) async {
+    print('=== FETCHING ENHANCED WEATHER DATA ===');
+    print('Combining historical data with current year live data');
+
+    // Step 1: Get historical data (20 years)
+    Map<String, dynamic> historicalResult = await getHistoricalData(
+      latitude: latitude,
+      longitude: longitude,
+      year: year,
+      month: month,
+      day: day,
+      selectedTime: selectedTime,
+    );
+
+    // Step 2: Try to get current year data
+    Map<String, dynamic> currentData = await getCurrentYearData(
+      latitude: latitude,
+      longitude: longitude,
+      year: year,
+      month: month,
+      day: day,
+    );
+
+    // Step 3: Process and combine the data
+    return _processEnhancedData(historicalResult, currentData, selectedTime);
+  }
+
+  // Process and combine historical data with current year data
+  static Map<String, dynamic> _processEnhancedData(
+    Map<String, dynamic> historicalResult,
+    Map<String, dynamic> currentData,
+    TimeOfDay? selectedTime,
+  ) {
+    print('=== PROCESSING ENHANCED DATA ===');
+
+    // Extract historical data
+    List<double> historicalPrecipitation = historicalResult['precipitationData'] ?? [];
+    List<double> historicalTemperature = historicalResult['temperatureData'] ?? [];
+    List<double> historicalHumidity = historicalResult['humidityData'] ?? [];
+    List<double> historicalWindSpeed = historicalResult['windSpeedData'] ?? [];
+
+    print('Historical data points:');
+    print('- Precipitation: ${historicalPrecipitation.length}');
+    print('- Temperature: ${historicalTemperature.length}');
+    print('- Humidity: ${historicalHumidity.length}');
+    print('- Wind Speed: ${historicalWindSpeed.length}');
+
+    // Extract current year data if available
+    List<double> currentPrecipitation = [];
+    List<double> currentTemperature = [];
+    List<double> currentHumidity = [];
+    List<double> currentWindSpeed = [];
+
+    if (currentData.isNotEmpty && currentData.containsKey('properties')) {
+      var properties = currentData['properties'];
+      if (properties != null && properties.containsKey('parameter')) {
+        var parameter = properties['parameter'];
+
+        // Extract current precipitation data
+        if (parameter.containsKey('PRECTOTCORR')) {
+          var precipData = parameter['PRECTOTCORR'];
+          if (precipData is Map) {
+            precipData.forEach((dateKey, value) {
+              if (value != null && value != -999.0 && value != -999 && value >= 0.0 && value <= 100.0) {
+                double precipValue = (value is int) ? value.toDouble() : value as double;
+                if (precipValue <= 50.0) {
+                  currentPrecipitation.add(precipValue);
+                }
+              }
+            });
+          }
+        }
+
+        // Extract current temperature data
+        if (parameter.containsKey('T2M')) {
+          var tempData = parameter['T2M'];
+          if (tempData is Map) {
+            tempData.forEach((dateKey, value) {
+              if (value != null && value != -999.0 && value != -999) {
+                double tempValue = (value is int) ? value.toDouble() : value as double;
+                currentTemperature.add(tempValue);
+              }
+            });
+          }
+        }
+
+        // Extract current humidity data
+        if (parameter.containsKey('RH2M')) {
+          var humidityData = parameter['RH2M'];
+          if (humidityData is Map) {
+            humidityData.forEach((dateKey, value) {
+              if (value != null && value != -999.0 && value != -999) {
+                double humidityValue = (value is int) ? value.toDouble() : value as double;
+                currentHumidity.add(humidityValue);
+              }
+            });
+          }
+        }
+
+        // Extract current wind speed data
+        if (parameter.containsKey('WS2M')) {
+          var windData = parameter['WS2M'];
+          if (windData is Map) {
+            windData.forEach((dateKey, value) {
+              if (value != null && value != -999.0 && value != -999) {
+                double windValue = (value is int) ? value.toDouble() : value as double;
+                currentWindSpeed.add(windValue);
+              }
+            });
+          }
+        }
+
+        print('Current year data points:');
+        print('- Precipitation: ${currentPrecipitation.length}');
+        print('- Temperature: ${currentTemperature.length}');
+        print('- Humidity: ${currentHumidity.length}');
+        print('- Wind Speed: ${currentWindSpeed.length}');
+      }
+    }
+
+    // Analyze current year precipitation patterns for recent rain detection
+    Map<String, dynamic> currentYearAnalysis = _analyzeCurrentYearPatterns(currentPrecipitation);
+
+    // Combine data with MUCH higher weight for current year (especially if recent rain detected)
+    List<double> combinedPrecipitation = [];
+    List<double> combinedTemperature = [];
+    List<double> combinedHumidity = [];
+    List<double> combinedWindSpeed = [];
+
+    // Prioritize current year data heavily
+    if (currentPrecipitation.isNotEmpty) {
+      // Add current year data multiple times to increase its weight
+      int currentYearMultiplier = currentYearAnalysis['hasRecentRain'] ? 8 : 5;
+      for (int i = 0; i < currentYearMultiplier && i < currentPrecipitation.length; i++) {
+        combinedPrecipitation.addAll(currentPrecipitation);
+      }
+      print('Added current year precipitation data $currentYearMultiplier times due to ${currentYearAnalysis['hasRecentRain'] ? 'recent rain' : 'no recent rain'}');
+    }
+
+    if (currentTemperature.isNotEmpty) {
+      int currentYearMultiplier = currentYearAnalysis['hasRecentRain'] ? 6 : 4;
+      for (int i = 0; i < currentYearMultiplier && i < currentTemperature.length; i++) {
+        combinedTemperature.addAll(currentTemperature);
+      }
+    }
+
+    if (currentHumidity.isNotEmpty) {
+      int currentYearMultiplier = currentYearAnalysis['hasRecentRain'] ? 6 : 4;
+      for (int i = 0; i < currentYearMultiplier && i < currentHumidity.length; i++) {
+        combinedHumidity.addAll(currentHumidity);
+      }
+    }
+
+    if (currentWindSpeed.isNotEmpty) {
+      int currentYearMultiplier = currentYearAnalysis['hasRecentRain'] ? 6 : 4;
+      for (int i = 0; i < currentYearMultiplier && i < currentWindSpeed.length; i++) {
+        combinedWindSpeed.addAll(currentWindSpeed);
+      }
+    }
+
+    // Add historical data with significantly reduced weight
+    if (historicalPrecipitation.isNotEmpty) {
+      int historicalSampleSize = currentYearAnalysis['hasRecentRain'] ? 8 : 12; // Even fewer if recent rain
+      historicalSampleSize = min(historicalSampleSize, historicalPrecipitation.length);
+
+      // Sample historical data more sparsely
+      int stepSize = (historicalPrecipitation.length / historicalSampleSize).round();
+      stepSize = max(1, stepSize);
+
+      for (int i = 0; i < historicalPrecipitation.length && combinedPrecipitation.length < historicalSampleSize * 3; i += stepSize) {
+        combinedPrecipitation.add(historicalPrecipitation[i]);
+      }
+      print('Added $historicalSampleSize historical precipitation samples (step: $stepSize)');
+    }
+
+    if (historicalTemperature.isNotEmpty) {
+      int historicalSampleSize = min(10, historicalTemperature.length);
+      for (int i = 0; i < historicalSampleSize; i++) {
+        combinedTemperature.add(historicalTemperature[i]);
+      }
+    }
+
+    if (historicalHumidity.isNotEmpty) {
+      int historicalSampleSize = min(10, historicalHumidity.length);
+      for (int i = 0; i < historicalSampleSize; i++) {
+        combinedHumidity.add(historicalHumidity[i]);
+      }
+    }
+
+    if (historicalWindSpeed.isNotEmpty) {
+      int historicalSampleSize = min(10, historicalWindSpeed.length);
+      for (int i = 0; i < historicalSampleSize; i++) {
+        combinedWindSpeed.add(historicalWindSpeed[i]);
+      }
+    }
+
+    print('Combined data points after enhanced weighting:');
+    print('- Precipitation: ${combinedPrecipitation.length}');
+    print('- Temperature: ${combinedTemperature.length}');
+    print('- Humidity: ${combinedHumidity.length}');
+    print('- Wind Speed: ${combinedWindSpeed.length}');
+
+    // Use enhanced probability calculation with current year awareness
+    double enhancedRainProbability = calculateEnhancedRainProbabilityWithCurrentYearAwareness(
+      combinedPrecipitation,
+      combinedTemperature,
+      combinedHumidity,
+      combinedWindSpeed,
+      selectedTime,
+      currentYearAnalysis,
+    );
+
+    // Calculate averages from combined data
+    double avgPrecipitation = combinedPrecipitation.isNotEmpty
+        ? combinedPrecipitation.reduce((a, b) => a + b) / combinedPrecipitation.length
+        : 0.0;
+
+    double avgTemperature = combinedTemperature.isNotEmpty
+        ? combinedTemperature.reduce((a, b) => a + b) / combinedTemperature.length
+        : 0.0;
+
+    double avgHumidity = combinedHumidity.isNotEmpty
+        ? combinedHumidity.reduce((a, b) => a + b) / combinedHumidity.length
+        : 0.0;
+
+    double avgWindSpeed = combinedWindSpeed.isNotEmpty
+        ? combinedWindSpeed.reduce((a, b) => a + b) / combinedWindSpeed.length
+        : 0.0;
+
+    print('Enhanced rain probability with current year awareness: ${enhancedRainProbability.toStringAsFixed(2)}%');
+    print('Average precipitation: ${avgPrecipitation.toStringAsFixed(2)} mm');
+    print('Average temperature: ${avgTemperature.toStringAsFixed(2)}°C');
+    print('Average humidity: ${avgHumidity.toStringAsFixed(2)}%');
+    print('Average wind speed: ${avgWindSpeed.toStringAsFixed(2)} m/s');
+
+    // Calculate prediction confidence with current year consideration
+    Map<String, dynamic> confidenceData = _calculateEnhancedPredictionConfidence(
+      combinedPrecipitation,
+      combinedTemperature,
+      combinedHumidity,
+      combinedWindSpeed,
+      currentPrecipitation,
+    );
+
+    return {
+      'rainProbability': enhancedRainProbability,
+      'baseRainProbability': combinedPrecipitation.isNotEmpty
+          ? (combinedPrecipitation.where((p) => p > 1.0).length / combinedPrecipitation.length) * 100.0
+          : 0.0,
+      'avgPrecipitation': avgPrecipitation,
+      'avgTemperature': avgTemperature,
+      'avgHumidity': avgHumidity,
+      'avgWindSpeed': avgWindSpeed,
+      'precipitationData': combinedPrecipitation,
+      'temperatureData': combinedTemperature,
+      'humidityData': combinedHumidity,
+      'windSpeedData': combinedWindSpeed,
+      'selectedTime': selectedTime != null ? {
+        'hour': selectedTime.hour,
+        'minute': selectedTime.minute,
+      } : null,
+      'confidence': confidenceData,
+      'currentYearAnalysis': currentYearAnalysis,
+      'dataQuality': {
+        'current_year_data': currentPrecipitation.isNotEmpty,
+        'current_precipitation_points': currentPrecipitation.length,
+        'historical_precipitation_points': historicalPrecipitation.length,
+        'total_precipitation_years': combinedPrecipitation.length,
+        'temperature_years': combinedTemperature.length,
+        'humidity_years': combinedHumidity.length,
+        'wind_years': combinedWindSpeed.length,
+        'recent_rain_detected': currentYearAnalysis['hasRecentRain'],
+      },
+      'data_sources': {
+        'current_year_available': currentData.isNotEmpty,
+        'historical_years': 20,
+        'total_data_points': combinedPrecipitation.length + combinedTemperature.length + combinedHumidity.length + combinedWindSpeed.length,
+        'current_year_weight_multiplier': currentYearAnalysis['hasRecentRain'] ? 8 : 5,
+      },
+    };
+  }
+
+  // Analyze current year patterns to detect recent rain
+  static Map<String, dynamic> _analyzeCurrentYearPatterns(List<double> currentPrecipitation) {
+    if (currentPrecipitation.isEmpty) {
+      return {
+        'hasRecentRain': false,
+        'recentRainScore': 0.0,
+        'maxRecentPrecipitation': 0.0,
+        'avgRecentPrecipitation': 0.0,
+        'recentRainyDays': 0,
+      };
+    }
+
+    double maxPrecip = currentPrecipitation.reduce((a, b) => a > b ? a : b);
+    double avgPrecip = currentPrecipitation.reduce((a, b) => a + b) / currentPrecipitation.length;
+    int recentRainyDays = currentPrecipitation.where((p) => p > 1.0).length;
+    int significantRainyDays = currentPrecipitation.where((p) => p > 3.0).length;
+
+    // Calculate recent rain score (0-100, higher = more recent rain)
+    double recentRainScore = 0.0;
+
+    // Factor 1: Significant rain days in current year
+    if (significantRainyDays > 0) {
+      recentRainScore += 40.0;
+    } else if (recentRainyDays > 0) {
+      recentRainScore += 25.0;
+    }
+
+    // Factor 2: High maximum precipitation
+    if (maxPrecip > 10.0) {
+      recentRainScore += 30.0;
+    } else if (maxPrecip > 5.0) {
+      recentRainScore += 20.0;
+    } else if (maxPrecip > 2.0) {
+      recentRainScore += 10.0;
+    }
+
+    // Factor 3: Above average precipitation
+    if (avgPrecip > 2.0) {
+      recentRainScore += 25.0;
+    } else if (avgPrecip > 1.0) {
+      recentRainScore += 15.0;
+    }
+
+    // Factor 4: Rain frequency
+    double rainFrequency = recentRainyDays / currentPrecipitation.length;
+    recentRainScore += rainFrequency * 20.0; // Up to 20 points for frequency
+
+    bool hasRecentRain = recentRainScore > 30.0; // Lower threshold for recent rain detection
+
+    print('Current Year Analysis:');
+    print('- Recent Rain Score: ${recentRainScore.toStringAsFixed(2)}');
+    print('- Has Recent Rain: $hasRecentRain');
+    print('- Max Precipitation: ${maxPrecip.toStringAsFixed(2)} mm');
+    print('- Avg Precipitation: ${avgPrecip.toStringAsFixed(2)} mm');
+    print('- Rainy Days: $recentRainyDays/${currentPrecipitation.length}');
+
+    return {
+      'hasRecentRain': hasRecentRain,
+      'recentRainScore': recentRainScore,
+      'maxRecentPrecipitation': maxPrecip,
+      'avgRecentPrecipitation': avgPrecip,
+      'recentRainyDays': recentRainyDays,
+      'significantRainyDays': significantRainyDays,
+      'rainFrequency': rainFrequency,
+    };
+  }
+
+  // Enhanced confidence calculation that considers live data availability
+  static Map<String, dynamic> _calculateEnhancedPredictionConfidence(
+    List<double> precipitation,
+    List<double> temperature,
+    List<double> humidity,
+    List<double> windSpeed,
+    List<double> currentPrecipitation,
+  ) {
+    // Start with base confidence calculation
+    Map<String, dynamic> baseConfidence = _calculatePredictionConfidence(
+      precipitation,
+      temperature,
+      humidity,
+      windSpeed,
+      DateTime.now(), // Use current date for seasonal calculation
+    );
+
+    double overallConfidence = baseConfidence['overall'];
+
+    // Boost confidence if current year data is available
+    if (currentPrecipitation.isNotEmpty) {
+      overallConfidence += 15.0; // Boost by 15% for having current year data
+
+      // Additional boost based on current year data quality
+      if (currentPrecipitation.length >= 3) {
+        overallConfidence += 5.0; // Extra boost for good current data
+      }
+
+      print('Confidence boosted by live data: +15-20%');
+    } else {
+      overallConfidence -= 10.0; // Penalty for missing current year data
+      print('Confidence reduced due to missing live data: -10%');
+    }
+
+    // Ensure confidence is within 0-100% range
+    overallConfidence = max(0.0, min(100.0, overallConfidence));
+
+    return {
+      'overall': overallConfidence,
+      'level': _getConfidenceLevel(overallConfidence),
+      'factors': [...baseConfidence['factors'], if (currentPrecipitation.isNotEmpty) 'Current Year Data Available'],
+      'low_confidence_reasons': baseConfidence['low_confidence_reasons'],
+      'data_quality_score': baseConfidence['data_quality_score'],
+      'live_data_bonus': currentPrecipitation.isNotEmpty ? 15.0 : 0.0,
+    };
   }
 
   static Map<String, dynamic> _processHistoricalData(List<Map<String, dynamic>> data, DateTime selectedDate, [TimeOfDay? selectedTime]) {
@@ -334,6 +787,367 @@ class NasaApiService {
 
     // Step 6: Apply final validation and bounds checking
     return _finalizeProbability(enhancedProbability, precipAnalysis);
+  }
+
+  // Enhanced rain probability calculation with current year awareness
+  static double calculateEnhancedRainProbabilityWithCurrentYearAwareness(
+    List<double> precipitation,
+    List<double> temperature,
+    List<double> humidity,
+    List<double> windSpeed,
+    TimeOfDay? selectedTime,
+    Map<String, dynamic> currentYearAnalysis,
+  ) {
+    if (precipitation.isEmpty) return 0.0;
+
+    // Step 1: Analyze precipitation patterns for sunny condition detection
+    Map<String, dynamic> precipAnalysis = _analyzePrecipitationPatterns(precipitation);
+
+    // Step 2: Calculate base probability with current year awareness
+    double baseProbability = _calculateImprovedBaseProbabilityWithCurrentYearAwareness(
+      precipitation,
+      precipAnalysis,
+      currentYearAnalysis
+    );
+
+    // Step 3: Apply enhanced weather factor adjustments with current year context
+    Map<String, double> weatherFactors = _calculateEnhancedWeatherFactorsWithCurrentYearAwareness(
+      temperature,
+      humidity,
+      windSpeed,
+      precipAnalysis,
+      currentYearAnalysis
+    );
+
+    // Step 4: Apply time-based adjustments with current year context
+    double timeAdjustment = _calculateImprovedTimeAdjustmentWithCurrentYearAwareness(
+      selectedTime,
+      precipAnalysis,
+      currentYearAnalysis
+    );
+
+    // Step 5: Combine all factors with current year adaptive weighting
+    double enhancedProbability = _combineProbabilityFactorsWithCurrentYearAwareness(
+      baseProbability,
+      weatherFactors,
+      timeAdjustment,
+      precipAnalysis,
+      currentYearAnalysis
+    );
+
+    // Step 6: Apply final validation with current year context
+    return _finalizeProbabilityWithCurrentYearAwareness(
+      enhancedProbability,
+      precipAnalysis,
+      currentYearAnalysis
+    );
+  }
+
+  // Calculate improved base probability with current year awareness
+  static double _calculateImprovedBaseProbabilityWithCurrentYearAwareness(
+    List<double> precipitation,
+    Map<String, dynamic> precipAnalysis,
+    Map<String, dynamic> currentYearAnalysis,
+  ) {
+    int totalDays = precipAnalysis['totalDays'];
+    int significantRainDays = precipAnalysis['significantRainDays'];
+
+    // Use higher threshold for significant rain (3mm+ instead of 2mm+)
+    double baseProbability = (significantRainDays / totalDays) * 100.0;
+
+    // Enhanced penalty for consistently dry conditions
+    if (precipAnalysis['isConsistentlyDry']) {
+      // Strong penalty for consistently dry locations
+      baseProbability = max(0.0, baseProbability - 35.0);
+
+      // Additional penalty based on dryness score
+      double drynessScore = precipAnalysis['drynessScore'];
+      if (drynessScore > 80.0) {
+        baseProbability = max(0.0, baseProbability - 25.0); // Extra penalty for extremely dry
+      } else if (drynessScore > 60.0) {
+        baseProbability = max(0.0, baseProbability - 15.0); // Moderate extra penalty
+      }
+    } else if (significantRainDays == 0) {
+      // Moderate penalty if no significant rain but not consistently dry
+      baseProbability = max(0.0, baseProbability - 15.0);
+    }
+
+    // CURRENT YEAR AWARENESS: Boost probability if recent rain detected
+    bool hasRecentRain = currentYearAnalysis['hasRecentRain'] ?? false;
+    if (hasRecentRain) {
+      double recentRainScore = currentYearAnalysis['recentRainScore'] ?? 0.0;
+      double boostFactor = min(recentRainScore / 30.0, 2.0); // Up to 2x boost for recent rain
+
+      // Apply boost based on recent rain intensity
+      if (recentRainScore > 60.0) {
+        baseProbability = min(100.0, baseProbability + 25.0); // Strong boost for intense recent rain
+      } else if (recentRainScore > 40.0) {
+        baseProbability = min(100.0, baseProbability + 15.0); // Moderate boost for moderate recent rain
+      } else if (recentRainScore > 20.0) {
+        baseProbability = min(100.0, baseProbability + 8.0);  // Light boost for light recent rain
+      }
+
+      print('Base probability boosted by recent rain: +${boostFactor > 1.0 ? (boostFactor * 100 - 100).toStringAsFixed(0) : "0"}%');
+    }
+
+    return baseProbability;
+  }
+
+  // Calculate enhanced weather factors with current year awareness
+  static Map<String, double> _calculateEnhancedWeatherFactorsWithCurrentYearAwareness(
+    List<double> temperature,
+    List<double> humidity,
+    List<double> windSpeed,
+    Map<String, dynamic> precipAnalysis,
+    Map<String, dynamic> currentYearAnalysis,
+  ) {
+    double temperatureFactor = 0.0;
+    double humidityFactor = 0.0;
+    double windFactor = 0.0;
+
+    bool isConsistentlyDry = precipAnalysis['isConsistentlyDry'];
+    bool hasRecentRain = currentYearAnalysis['hasRecentRain'] ?? false;
+
+    // Enhanced temperature adjustments
+    if (temperature.isNotEmpty) {
+      double avgTemp = temperature.reduce((a, b) => a + b) / temperature.length;
+
+      if (isConsistentlyDry && !hasRecentRain) {
+        // Stronger adjustments for consistently dry locations WITHOUT recent rain
+        if (avgTemp > 35) {
+          temperatureFactor = -15.0; // Very strong decrease for extreme heat in dry areas
+        } else if (avgTemp > 30) {
+          temperatureFactor = -10.0; // Strong decrease for hot weather in dry areas
+        } else if (avgTemp > 25) {
+          temperatureFactor = -6.0;  // Moderate decrease for warm weather in dry areas
+        } else if (avgTemp < 5) {
+          temperatureFactor = 3.0;   // Slight increase for very cold weather
+        }
+      } else if (hasRecentRain) {
+        // Reduce temperature penalties if there's recent rain (indicates changeable weather)
+        if (avgTemp > 35) {
+          temperatureFactor = -5.0; // Reduced penalty for extreme heat with recent rain
+        } else if (avgTemp > 28) {
+          temperatureFactor = -2.0; // Reduced penalty for hot weather with recent rain
+        } else if (avgTemp < 5) {
+          temperatureFactor = 5.0;  // Increased boost for very cold weather with recent rain
+        }
+      } else {
+        // Standard adjustments for other locations
+        if (avgTemp > 35) {
+          temperatureFactor = -8.0;
+        } else if (avgTemp > 28) {
+          temperatureFactor = -4.0;
+        } else if (avgTemp < 5) {
+          temperatureFactor = 2.0;
+        }
+      }
+    }
+
+    // Enhanced humidity adjustments
+    if (humidity.isNotEmpty) {
+      double avgHumidity = humidity.reduce((a, b) => a + b) / humidity.length;
+
+      if (isConsistentlyDry && !hasRecentRain) {
+        // Much stronger adjustments for dry locations without recent rain
+        if (avgHumidity < 25) {
+          humidityFactor = -12.0; // Very strong decrease for very low humidity in dry areas
+        } else if (avgHumidity < 35) {
+          humidityFactor = -8.0;  // Strong decrease for low humidity in dry areas
+        } else if (avgHumidity < 45) {
+          humidityFactor = -4.0;  // Moderate decrease for moderate humidity in dry areas
+        } else if (avgHumidity > 85) {
+          humidityFactor = 4.0;   // Slight increase for very high humidity
+        }
+      } else if (hasRecentRain) {
+        // Adjust for recent rain conditions
+        if (avgHumidity < 30) {
+          humidityFactor = -3.0; // Reduced penalty for low humidity with recent rain
+        } else if (avgHumidity < 40) {
+          humidityFactor = -1.0; // Minimal penalty for dry conditions with recent rain
+        } else if (avgHumidity > 85) {
+          humidityFactor = 8.0;  // Increased boost for very high humidity with recent rain
+        } else if (avgHumidity > 70) {
+          humidityFactor = 4.0;  // Moderate boost for high humidity with recent rain
+        }
+      } else {
+        // Standard adjustments for other locations
+        if (avgHumidity < 30) {
+          humidityFactor = -6.0;
+        } else if (avgHumidity < 40) {
+          humidityFactor = -3.0;
+        } else if (avgHumidity > 85) {
+          humidityFactor = 3.0;
+        }
+      }
+    }
+
+    // Enhanced wind adjustments
+    if (windSpeed.isNotEmpty) {
+      double avgWindSpeed = windSpeed.reduce((a, b) => a + b) / windSpeed.length;
+
+      if (isConsistentlyDry && !hasRecentRain) {
+        // Consider wind patterns in dry areas without recent rain
+        if (avgWindSpeed > 15) {
+          windFactor = -3.0; // Slight decrease for strong winds in dry areas
+        } else if (avgWindSpeed < 3) {
+          windFactor = -2.0; // Light winds can indicate stable high pressure (sunny)
+        }
+      } else if (hasRecentRain) {
+        // Adjust wind for recent rain conditions
+        if (avgWindSpeed > 15) {
+          windFactor = 2.0;  // Slight increase for strong winds with recent rain (could indicate storms)
+        } else if (avgWindSpeed < 3) {
+          windFactor = 1.0;  // Reduced penalty for light winds with recent rain
+        }
+      } else {
+        // Standard wind adjustments
+        if (avgWindSpeed > 15) {
+          windFactor = -2.0;
+        }
+      }
+    }
+
+    return {
+      'temperature': temperatureFactor,
+      'humidity': humidityFactor,
+      'wind': windFactor,
+    };
+  }
+
+  // Calculate improved time adjustments with current year awareness
+  static double _calculateImprovedTimeAdjustmentWithCurrentYearAwareness(
+    TimeOfDay? selectedTime,
+    Map<String, dynamic> precipAnalysis,
+    Map<String, dynamic> currentYearAnalysis,
+  ) {
+    if (selectedTime == null) return 0.0;
+
+    int hour = selectedTime.hour;
+    bool isConsistentlyDry = precipAnalysis['isConsistentlyDry'];
+    bool hasRecentRain = currentYearAnalysis['hasRecentRain'] ?? false;
+
+    // Base time adjustments
+    double baseTimeAdjustment = 0.0;
+
+    if (hour >= 5 && hour < 11) {
+      // Morning: Generally lower rain probability
+      baseTimeAdjustment = -5.0;
+    } else if (hour >= 11 && hour < 17) {
+      // Afternoon: Standard probability, often when thunderstorms occur
+      baseTimeAdjustment = 1.0;
+    } else if (hour >= 17 && hour < 21) {
+      // Evening: Higher probability in many regions
+      baseTimeAdjustment = 3.0;
+    } else {
+      // Night/Late night: Often highest probability for sustained rain
+      baseTimeAdjustment = 5.0;
+    }
+
+    // Adjust for consistently dry conditions
+    if (isConsistentlyDry && !hasRecentRain) {
+      // Reduce time-based increases for dry locations without recent rain
+      if (baseTimeAdjustment > 0) {
+        baseTimeAdjustment = baseTimeAdjustment * 0.5; // Reduce positive adjustments by half
+      }
+      // Enhance negative adjustments for dry locations
+      if (baseTimeAdjustment < 0) {
+        baseTimeAdjustment = baseTimeAdjustment * 1.2; // Slightly enhance negative adjustments
+      }
+    } else if (hasRecentRain) {
+      // Increase time-based adjustments for locations with recent rain
+      if (baseTimeAdjustment > 0) {
+        baseTimeAdjustment = baseTimeAdjustment * 1.3; // Increase positive adjustments by 30%
+      }
+      // Reduce negative adjustments for locations with recent rain
+      if (baseTimeAdjustment < 0) {
+        baseTimeAdjustment = baseTimeAdjustment * 0.8; // Reduce negative adjustments by 20%
+      }
+    }
+
+    return baseTimeAdjustment;
+  }
+
+  // Combine all probability factors with current year adaptive weighting
+  static double _combineProbabilityFactorsWithCurrentYearAwareness(
+    double baseProbability,
+    Map<String, double> weatherFactors,
+    double timeAdjustment,
+    Map<String, dynamic> precipAnalysis,
+    Map<String, dynamic> currentYearAnalysis,
+  ) {
+    bool isConsistentlyDry = precipAnalysis['isConsistentlyDry'];
+    double drynessScore = precipAnalysis['drynessScore'];
+    bool hasRecentRain = currentYearAnalysis['hasRecentRain'] ?? false;
+
+    // Adaptive weighting based on dryness and recent rain
+    double tempWeight = 0.9;
+    double humidityWeight = 0.9;
+    double windWeight = 0.7;
+    double timeWeight = 0.8;
+
+    if (isConsistentlyDry && !hasRecentRain) {
+      // Higher weight for temperature and humidity in dry areas without recent rain
+      tempWeight = 1.2;
+      humidityWeight = 1.3;
+      timeWeight = 0.6; // Lower weight for time in dry areas
+    } else if (hasRecentRain) {
+      // Higher weight for humidity and time when there's recent rain
+      humidityWeight = 1.4;
+      timeWeight = 1.1; // Higher weight for time with recent rain
+      tempWeight = 1.0; // Normal weight for temperature with recent rain
+    }
+
+    double enhancedProbability = baseProbability +
+      (weatherFactors['temperature']! * tempWeight) +
+      (weatherFactors['humidity']! * humidityWeight) +
+      (weatherFactors['wind']! * windWeight) +
+      (timeAdjustment * timeWeight);
+
+    return enhancedProbability;
+  }
+
+  // Final probability validation with current year context
+  static double _finalizeProbabilityWithCurrentYearAwareness(
+    double probability,
+    Map<String, dynamic> precipAnalysis,
+    Map<String, dynamic> currentYearAnalysis,
+  ) {
+    bool isConsistentlyDry = precipAnalysis['isConsistentlyDry'];
+    double drynessScore = precipAnalysis['drynessScore'];
+    bool hasRecentRain = currentYearAnalysis['hasRecentRain'] ?? false;
+
+    // Additional reduction for extremely dry conditions WITHOUT recent rain
+    if (isConsistentlyDry && drynessScore > 80.0 && !hasRecentRain) {
+      probability = max(0.0, probability - 10.0); // Extra 10% reduction for extremely dry
+    } else if (isConsistentlyDry && drynessScore > 60.0 && !hasRecentRain) {
+      probability = max(0.0, probability - 5.0);  // Extra 5% reduction for very dry
+    }
+
+    // BOOST for recent rain conditions
+    if (hasRecentRain) {
+      double recentRainScore = currentYearAnalysis['recentRainScore'] ?? 0.0;
+      if (recentRainScore > 60.0) {
+        probability = min(100.0, probability + 8.0); // Boost for intense recent rain
+      } else if (recentRainScore > 40.0) {
+        probability = min(100.0, probability + 5.0); // Moderate boost for moderate recent rain
+      } else if (recentRainScore > 20.0) {
+        probability = min(100.0, probability + 3.0); // Light boost for light recent rain
+      }
+    }
+
+    // Ensure probability is within 0-100% range
+    double finalProbability = max(0.0, min(100.0, probability));
+
+    // Log the improvements for debugging
+    print('=== ENHANCED PROBABILITY CALCULATION WITH CURRENT YEAR AWARENESS ===');
+    print('Original probability: ${probability.toStringAsFixed(2)}%');
+    print('Dryness score: ${drynessScore.toStringAsFixed(2)}');
+    print('Is consistently dry: $isConsistentlyDry');
+    print('Has recent rain: $hasRecentRain');
+    print('Final probability: ${finalProbability.toStringAsFixed(2)}%');
+
+    return finalProbability;
   }
 
   // Analyze precipitation patterns to detect consistently dry conditions
